@@ -557,13 +557,13 @@ const App = () => {
             <table className="w-full text-left border-collapse">
               <thead className="bg-slate-50 text-[11px] font-bold text-slate-400 uppercase tracking-wider border-b">
                 <tr>
-                  <th className="p-4 w-32 text-center">현재 상태</th>
-                  <th className="p-4 min-w-[200px]">배너 명칭</th>
-                  <th className="p-4 w-16 text-center">색상</th>
-                  <th className="p-4 w-44">노출 구좌</th>
-                  <th className="p-4 w-80 text-center">노출 기간 (날짜 · 시간)</th>
-                  <th className="p-4 w-32 text-left">담당 부서</th>
-                  <th className="p-4 w-16 text-center">삭제</th>
+                  <th className="p-4 w-28 text-center">현재 상태</th>
+                  <th className="p-4 w-40">배너 명칭</th>
+                  <th className="p-4 w-12 text-center">색상</th>
+                  <th className="p-4 w-36">노출 구좌</th>
+                  <th className="p-4 w-72 text-center">노출 기간 (날짜 · 시간)</th>
+                  <th className="p-4 w-28 text-left">담당 부서</th>
+                  <th className="p-4 w-12 text-center">삭제</th>
                 </tr>
               </thead>
               <tbody className="divide-y text-sm">
@@ -614,7 +614,7 @@ const App = () => {
                             <span className="text-[10px] font-black text-slate-400 w-6 text-right flex-shrink-0">시작</span>
                             <input
                               type="date"
-                              className="border border-slate-200 rounded px-1.5 py-1 text-[11px] focus:ring-1 focus:ring-blue-500 outline-none"
+                              className="border border-slate-200 rounded px-1.5 py-1 text-[11px] focus:ring-1 focus:ring-blue-500 outline-none w-28"
                               value={toDateOnly(banner.start)}
                               onChange={(e) => {
                                 const time = banner.start?.slice(11, 16) || '00:00';
@@ -623,7 +623,7 @@ const App = () => {
                             />
                             <input
                               type="time"
-                              className="border border-slate-200 rounded px-1.5 py-1 text-[11px] focus:ring-1 focus:ring-blue-500 outline-none w-20"
+                              className="border border-slate-200 rounded px-1.5 py-1 text-[11px] focus:ring-1 focus:ring-blue-500 outline-none w-24"
                               value={banner.start?.slice(11, 16) || '00:00'}
                               onChange={(e) => {
                                 const date = toDateOnly(banner.start) || toDateOnly(new Date().toISOString());
@@ -636,7 +636,7 @@ const App = () => {
                             <span className="text-[10px] font-black text-slate-400 w-6 text-right flex-shrink-0">종료</span>
                             <input
                               type="date"
-                              className="border border-slate-200 rounded px-1.5 py-1 text-[11px] focus:ring-1 focus:ring-blue-500 outline-none"
+                              className="border border-slate-200 rounded px-1.5 py-1 text-[11px] focus:ring-1 focus:ring-blue-500 outline-none w-28"
                               value={toDateOnly(banner.end)}
                               onChange={(e) => {
                                 const time = banner.end?.slice(11, 16) || '23:59';
@@ -645,7 +645,7 @@ const App = () => {
                             />
                             <input
                               type="time"
-                              className="border border-slate-200 rounded px-1.5 py-1 text-[11px] focus:ring-1 focus:ring-blue-500 outline-none w-20"
+                              className="border border-slate-200 rounded px-1.5 py-1 text-[11px] focus:ring-1 focus:ring-blue-500 outline-none w-24"
                               value={banner.end?.slice(11, 16) || '23:59'}
                               onChange={(e) => {
                                 const date = toDateOnly(banner.end) || toDateOnly(new Date().toISOString());
