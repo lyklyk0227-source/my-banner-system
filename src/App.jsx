@@ -29,6 +29,17 @@ const App = () => {
     setHasUnsaved(true);
   }, [banners]);
 
+  // 미저장 상태에서 페이지 이탈 시 경고
+  useEffect(() => {
+    const handleBeforeUnload = (e) => {
+      if (!hasUnsaved) return;
+      e.preventDefault();
+      e.returnValue = '저장하지 않은 변경사항이 있어요. 페이지를 나가면 사라져요!';
+    };
+    window.addEventListener('beforeunload', handleBeforeUnload);
+    return () => window.removeEventListener('beforeunload', handleBeforeUnload);
+  }, [hasUnsaved]);
+
   // 인라인 편집: editingId로 어떤 배너 편집 중인지, editForm으로 name/dept 동시 관리
   const [editingId, setEditingId] = useState(null);
   const [editForm, setEditForm] = useState({ name: '', dept: '' });
