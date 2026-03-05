@@ -212,28 +212,10 @@ const App = () => {
             }} />
           </div>
         </div>
-        <div className="flex items-center gap-3">
+<div className="flex items-center gap-3">
           <label className="flex items-center gap-2 bg-white border px-4 py-2 rounded-lg text-sm cursor-pointer shadow-sm hover:bg-slate-50 transition-colors">
-            <input
-              type="checkbox"
-              checked={showOnlyVisible}
-              onChange={(e) => setShowOnlyVisible(e.target.checked)}
-              className="w-4 h-4 rounded text-blue-600 focus:ring-blue-500 cursor-pointer"
-            />
-            <span className="font-semibold text-slate-600">활성 구좌만 보기</span>
+            ...
           </label>
-          <button
-            onClick={() => {
-              const id = Date.now().toString();
-              setBanners([...banners, {
-                id, name: '새 배너', slot: allSlots[0],
-                start: formatDate(new Date()),
-                end: formatDate(new Date(Date.now() + 86400000 * 4)),
-                dept: '기타', color: '#E2E8F0', memo: ''
-              }]);
-            }}
-            className="flex items-center gap-2 bg-blue-600 hover:bg-blue-700 text-white px-5 py-2 rounded-lg font-bold shadow-md transition-all active:scale-95"
-          >
           <button
             onClick={() => {
               setSaving(true);
@@ -246,6 +228,18 @@ const App = () => {
           >
             <Save size={18} /> {saving ? '저장 중...' : '저장'}
           </button>
+          <button
+            onClick={() => {
+              const id = Date.now().toString();
+              setBanners([...banners, {
+                id, name: '새 배너', slot: allSlots[0],
+                start: formatDate(new Date()),
+                end: formatDate(new Date(Date.now() + 86400000 * 4)),
+                dept: '기타', color: '#E2E8F0', memo: ''
+              }]);
+            }}
+            className="flex items-center gap-2 bg-blue-600 hover:bg-blue-700 text-white px-5 py-2 rounded-lg font-bold shadow-md transition-all active:scale-95"
+          >
             <Plus size={18} /> 배너 추가
           </button>
         </div>
