@@ -1,18 +1,8 @@
 import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { 
-  Calendar, 
-  Plus, 
-  Trash2, 
-  Eye, 
-  EyeOff, 
-  ChevronLeft, 
-  ChevronRight,
-  Layout,
-  AlertCircle,
-  Save,
-  Pencil,
-  Check,
-  X
+  Calendar, Plus, Trash2, Eye, EyeOff,
+  ChevronLeft, ChevronRight, Layout,
+  AlertCircle, Save, Pencil, Check, X
 } from 'lucide-react';
 
 const SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbzoHeSt4DxT1m1Oqwiromcldeso49DHDJCtH_JVzVMuKJ2b5Q1GEMig4R_vmvVL-nUMaQ/exec';
@@ -24,6 +14,7 @@ const App = () => {
   const [activeTab, setActiveTab] = useState('전체');
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
+  const [hasUnsaved, setHasUnsaved] = useState(false);
 
   const [allSlots, setAllSlots] = useState(DEFAULT_SLOTS);
   const [banners, setBanners] = useState([]);
@@ -31,11 +22,18 @@ const App = () => {
     DEFAULT_SLOTS.reduce((acc, slot) => ({ ...acc, [slot]: true }), {})
   );
 
-  // 인라인 편집 상태: { id, field: 'name'|'dept' }
-  const [editingCell, setEditingCell] = useState(null);
-  const [editValue, setEditValue] = useState('');
-  const editInputRef = useRef(null);
+  const isFirstLoad = useRef(true);
 
+  useEffect(() => {
+    if (isFirstLoad.current) return;
+    setHasUnsaved(true);
+  }, [banners]);
+
+  // 인라인 편집: editingId로 어떤 배너 편집 중인지, editForm으로 name/dept 동시 관리
+  const [editingId, setEditingId] = useState(null);
+  const [editForm, setEditForm] = useState({ name: '', dept: '' });
+  const nameInputRef = useRef(null);
+  const deptInputRef = useRef(null);
   const slotRefs = useRef({});
 
   useEffect(() => {
@@ -46,17 +44,20 @@ const App = () => {
           setBanners(data.map(b => ({ ...b, id: String(b.id) })));
         }
         setLoading(false);
+        setTimeout(() => { isFirstLoad.current = false; }, 0);
       })
-      .catch(() => setLoading(false));
+      .catch(() => {
+        setLoading(false);
+        setTimeout(() => { isFirstLoad.current = false; }, 0);
+      });
   }, []);
 
-  // 편집 인풋 자동 포커스
+  // 편집 모드 진입 시 name 인풋 자동 포커스
   useEffect(() => {
-    if (editingCell && editInputRef.current) {
-      editInputRef.current.focus();
-      editInputRef.current.select();
+    if (editingId) {
+      setTimeout(() => nameInputRef.current?.focus(), 0);
     }
-  }, [editingCell]);
+  }, [editingId]);
 
   const checkCollision = useMemo(() => {
     const collisions = {};
@@ -128,7 +129,7 @@ const App = () => {
   const [dropTargetSlot, setDropTargetSlot] = useState(null);
 
   const handleMouseDown = (e, banner, type) => {
-    if (editingCell) return;
+    if (editingId) return;
     e.stopPropagation();
     const slotLayouts = {};
     displaySlots.forEach(slot => {
@@ -191,26 +192,34 @@ const App = () => {
     };
   }, [dragging]);
 
-  // 편집 시작
-  const startEdit = (e, banner, field) => {
+  // 편집 시작: name/dept 동시에 editForm에 세팅
+  const startEdit = (e, banner) => {
     e.stopPropagation();
     e.preventDefault();
-    setEditingCell({ id: banner.id, field });
-    setEditValue(field === 'name' ? banner.name : (banner.dept || ''));
+    setEditingId(banner.id);
+    setEditForm({ name: banner.name, dept: banner.dept || '' });
   };
 
-  // 편집 저장
+  // 편집 저장: name/dept 동시에 반영
   const commitEdit = () => {
-    if (!editingCell) return;
+    if (!editingId) return;
     setBanners(prev => prev.map(b =>
-      b.id === editingCell.id ? { ...b, [editingCell.field]: editValue } : b
+      b.id === editingId ? { ...b, name: editForm.name, dept: editForm.dept } : b
     ));
-    setEditingCell(null);
+    setEditingId(null);
   };
 
-  // 편집 취소
-  const cancelEdit = () => {
-    setEditingCell(null);
+  const cancelEdit = () => setEditingId(null);
+
+  const handleSave = () => {
+    setSaving(true);
+    fetch(SCRIPT_URL, {
+      method: 'POST',
+      body: JSON.stringify({ action: 'save', data: banners }),
+    }).finally(() => {
+      setSaving(false);
+      setHasUnsaved(false);
+    });
   };
 
   if (loading) {
@@ -229,14 +238,9 @@ const App = () => {
 
       <div className="flex items-center justify-between px-6 py-4 bg-white border-b shadow-sm z-50">
         <div className="flex items-center gap-6">
-          <h1 className="text-xl font-bold text-slate-900 tracking-tight flex items-center gap-2">
-            배너 운영 현황 관리
-            <span className="text-[10px] font-bold text-orange-600 bg-orange-50 px-2 py-0.5 rounded border border-orange-200">v1.0</span>
-            {saving && (
-              <span className="text-[10px] font-bold text-blue-500 bg-blue-50 px-2 py-0.5 rounded border border-blue-200 flex items-center gap-1">
-                <Save size={10} className="animate-pulse" /> 저장 중...
-              </span>
-            )}
+          <h1 className="flex flex-col leading-tight">
+            <span className="text-xl font-bold text-slate-900 tracking-tight">🍦배너 관리</span>
+            <span className="text-[11px] font-medium text-slate-400 tracking-wide">i-Scream Banner Management</span>
           </h1>
           <div className="flex items-center gap-2 bg-slate-100 px-3 py-1.5 rounded-full border border-slate-200 text-sm font-medium">
             <ChevronLeft className="cursor-pointer hover:text-blue-600 transition-colors" onClick={() => {
@@ -261,18 +265,29 @@ const App = () => {
             />
             <span className="font-semibold text-slate-600">활성 구좌만 보기</span>
           </label>
-          <button
-            onClick={() => {
-              setSaving(true);
-              fetch(SCRIPT_URL, {
-                method: 'POST',
-                body: JSON.stringify({ action: 'save', data: banners }),
-              }).finally(() => setSaving(false));
-            }}
-            className="flex items-center gap-2 bg-emerald-600 hover:bg-emerald-700 text-white px-5 py-2 rounded-lg font-bold shadow-md transition-all active:scale-95"
-          >
-            <Save size={18} /> {saving ? '저장 중...' : '저장'}
-          </button>
+
+          <div className="relative">
+            {hasUnsaved && !saving && (
+              <span className="absolute -top-1.5 -right-1.5 flex h-3.5 w-3.5 z-10">
+                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-amber-400 opacity-75"></span>
+                <span className="relative inline-flex rounded-full h-3.5 w-3.5 bg-amber-400"></span>
+              </span>
+            )}
+            <button
+              onClick={handleSave}
+              className={`flex items-center gap-2 px-5 py-2 rounded-lg font-bold shadow-md transition-all active:scale-95
+                ${saving
+                  ? 'bg-emerald-400 cursor-not-allowed text-white'
+                  : hasUnsaved
+                    ? 'bg-amber-500 hover:bg-amber-600 text-white ring-2 ring-amber-300 ring-offset-1'
+                    : 'bg-emerald-600 hover:bg-emerald-700 text-white'
+                }`}
+            >
+              <Save size={18} className={saving ? 'animate-pulse' : hasUnsaved ? 'animate-bounce' : ''} />
+              {saving ? '저장 중...' : hasUnsaved ? '저장 필요!' : '저장'}
+            </button>
+          </div>
+
           <button
             onClick={() => {
               const id = Date.now().toString();
@@ -352,7 +367,7 @@ const App = () => {
                               const duration = Math.round((actualDisplayEnd - actualDisplayStart) / 86400000) + 1;
                               const hasCollision = checkCollision[banner.id];
                               const isDraggingThis = dragging?.id === banner.id;
-                              const isEditingThis = editingCell?.id === banner.id;
+                              const isEditingThis = editingId === banner.id;
 
                               return (
                                 <div
@@ -365,20 +380,20 @@ const App = () => {
                                     zIndex: isDraggingThis ? 1000 : isEditingThis ? 200 : 20,
                                     opacity: isDraggingThis ? 0.8 : 1,
                                     transform: isDraggingThis ? 'scale(1.02)' : 'none',
-                                    minWidth: isEditingThis ? '220px' : undefined,
+                                    minWidth: isEditingThis ? '230px' : undefined,
                                   }}
                                   className={`absolute h-8 rounded-lg shadow-sm border border-black/10 flex items-center overflow-visible transition-all ring-1 ring-inset group/bar
                                     ${isEditingThis ? 'cursor-default ring-blue-400 ring-2 shadow-lg' : 'cursor-grab active:cursor-grabbing'}
                                     ${hasCollision && !isEditingThis ? 'ring-red-500 ring-2' : ''}
                                     ${isDraggingThis ? 'shadow-xl brightness-105' : !isEditingThis ? 'hover:brightness-95' : ''}`}
                                 >
-                                  {/* 왼쪽 리사이즈 핸들 */}
+                                  {/* 리사이즈 핸들 (편집 중 비활성) */}
                                   {!isEditingThis && (
                                     <div className="absolute left-0 top-0 w-2 h-full cursor-ew-resize hover:bg-black/10 z-30 rounded-l-lg"
                                       onMouseDown={(e) => handleMouseDown(e, banner, 'resize-start')} />
                                   )}
 
-                                  {/* ── 일반 보기 모드 ── */}
+                                  {/* 일반 보기 모드 */}
                                   {!isEditingThis && (
                                     <div className="flex items-center w-full h-full overflow-hidden">
                                       <div className="flex items-center px-2 gap-1.5 overflow-hidden flex-1 pointer-events-none">
@@ -390,10 +405,9 @@ const App = () => {
                                         )}
                                         <span className="text-[11px] font-bold text-slate-800 truncate drop-shadow-sm">{banner.name}</span>
                                       </div>
-                                      {/* 연필 아이콘 - hover 시 표시 */}
                                       <button
                                         onMouseDown={(e) => e.stopPropagation()}
-                                        onClick={(e) => startEdit(e, banner, 'name')}
+                                        onClick={(e) => startEdit(e, banner)}
                                         className="flex-shrink-0 mr-1 opacity-0 group-hover/bar:opacity-100 transition-opacity bg-white/80 hover:bg-white rounded p-0.5 shadow-sm border border-slate-200/80 z-40"
                                         title="이름/부서 수정"
                                       >
@@ -402,49 +416,48 @@ const App = () => {
                                     </div>
                                   )}
 
-                                  {/* ── 편집 모드 ── */}
+                                  {/* 편집 모드: dept + name 동시 편집 */}
                                   {isEditingThis && (
                                     <div
                                       className="flex items-center w-full h-full px-1.5 gap-1"
                                       onMouseDown={(e) => e.stopPropagation()}
                                     >
-                                      {/* dept 인풋 */}
+                                      {/* 부서 인풋 */}
                                       <input
+                                        ref={deptInputRef}
                                         className="w-16 h-5 text-[10px] font-black bg-black/10 rounded px-1 outline-none focus:ring-1 focus:ring-blue-400 text-slate-700 placeholder:text-slate-400 flex-shrink-0"
                                         placeholder="부서"
-                                        value={editingCell.field === 'dept' ? editValue : banner.dept || ''}
-                                        readOnly={editingCell.field !== 'dept'}
-                                        ref={editingCell.field === 'dept' ? editInputRef : null}
-                                        onClick={(e) => { e.stopPropagation(); setEditingCell({ id: banner.id, field: 'dept' }); setEditValue(banner.dept || ''); }}
-                                        onChange={(e) => editingCell.field === 'dept' && setEditValue(e.target.value)}
-                                        onKeyDown={(e) => {
-                                          if (e.key === 'Enter') { commitEdit(); }
-                                          if (e.key === 'Escape') cancelEdit();
-                                          if (e.key === 'Tab') { e.preventDefault(); setEditingCell({ id: banner.id, field: 'name' }); setEditValue(banner.name); }
-                                        }}
-                                      />
-                                      {/* name 인풋 */}
-                                      <input
-                                        className="flex-1 min-w-0 h-5 text-[11px] font-bold bg-white/80 rounded px-1.5 outline-none focus:ring-1 focus:ring-blue-400 text-slate-800 placeholder:text-slate-400"
-                                        placeholder="배너명"
-                                        value={editingCell.field === 'name' ? editValue : banner.name}
-                                        readOnly={editingCell.field !== 'name'}
-                                        ref={editingCell.field === 'name' ? editInputRef : null}
-                                        onClick={(e) => { e.stopPropagation(); setEditingCell({ id: banner.id, field: 'name' }); setEditValue(banner.name); }}
-                                        onChange={(e) => editingCell.field === 'name' && setEditValue(e.target.value)}
+                                        value={editForm.dept}
+                                        onChange={(e) => setEditForm(f => ({ ...f, dept: e.target.value }))}
+                                        onClick={(e) => e.stopPropagation()}
                                         onKeyDown={(e) => {
                                           if (e.key === 'Enter') commitEdit();
                                           if (e.key === 'Escape') cancelEdit();
-                                          if (e.key === 'Tab') { e.preventDefault(); setEditingCell({ id: banner.id, field: 'dept' }); setEditValue(banner.dept || ''); }
+                                          if (e.key === 'Tab') { e.preventDefault(); nameInputRef.current?.focus(); }
                                         }}
                                       />
-                                      {/* 확인/취소 버튼 */}
+                                      {/* 배너명 인풋 */}
+                                      <input
+                                        ref={nameInputRef}
+                                        className="flex-1 min-w-0 h-5 text-[11px] font-bold bg-white/80 rounded px-1.5 outline-none focus:ring-1 focus:ring-blue-400 text-slate-800 placeholder:text-slate-400"
+                                        placeholder="배너명"
+                                        value={editForm.name}
+                                        onChange={(e) => setEditForm(f => ({ ...f, name: e.target.value }))}
+                                        onClick={(e) => e.stopPropagation()}
+                                        onKeyDown={(e) => {
+                                          if (e.key === 'Enter') commitEdit();
+                                          if (e.key === 'Escape') cancelEdit();
+                                          if (e.key === 'Tab') { e.preventDefault(); deptInputRef.current?.focus(); }
+                                        }}
+                                      />
+                                      {/* 저장 버튼 */}
                                       <button
                                         onClick={(e) => { e.stopPropagation(); commitEdit(); }}
                                         className="flex-shrink-0 bg-blue-500 hover:bg-blue-600 text-white rounded p-0.5"
                                       >
                                         <Check size={11} />
                                       </button>
+                                      {/* 취소 버튼 */}
                                       <button
                                         onClick={(e) => { e.stopPropagation(); cancelEdit(); }}
                                         className="flex-shrink-0 bg-slate-200 hover:bg-slate-300 text-slate-600 rounded p-0.5"
@@ -454,7 +467,6 @@ const App = () => {
                                     </div>
                                   )}
 
-                                  {/* 오른쪽 리사이즈 핸들 */}
                                   {!isEditingThis && (
                                     <div className="absolute right-0 top-0 w-2 h-full cursor-ew-resize hover:bg-black/10 z-30 rounded-r-lg"
                                       onMouseDown={(e) => handleMouseDown(e, banner, 'resize-end')} />
@@ -509,7 +521,7 @@ const App = () => {
                 {filteredBanners.map(banner => {
                   const status = getStatus(banner.start, banner.end);
                   const hasCollision = checkCollision[banner.id];
-                  const isBeingEdited = editingCell?.id === banner.id;
+                  const isBeingEdited = editingId === banner.id;
                   return (
                     <tr key={banner.id} className={`hover:bg-slate-50/50 transition-colors group ${hasCollision ? 'bg-red-50/30' : ''} ${isBeingEdited ? 'bg-blue-50/40' : ''}`}>
                       <td className="p-4 text-center">
