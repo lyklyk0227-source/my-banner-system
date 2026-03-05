@@ -43,16 +43,6 @@ const App = () => {
       .catch(() => setLoading(false));
   }, []);
 
-  useEffect(() => {
-    if (isFirstRender.current) { isFirstRender.current = false; return; }
-    if (loading) return;
-    setSaving(true);
-    fetch(SCRIPT_URL, {
-      method: 'POST',
-      body: JSON.stringify({ action: 'save', data: banners }),
-    }).finally(() => setSaving(false));
-  }, [banners]);
-
   const checkCollision = useMemo(() => {
     const collisions = {};
     banners.forEach(b1 => {
@@ -244,6 +234,18 @@ const App = () => {
             }}
             className="flex items-center gap-2 bg-blue-600 hover:bg-blue-700 text-white px-5 py-2 rounded-lg font-bold shadow-md transition-all active:scale-95"
           >
+          <button
+            onClick={() => {
+              setSaving(true);
+              fetch(SCRIPT_URL, {
+                method: 'POST',
+                body: JSON.stringify({ action: 'save', data: banners }),
+              }).finally(() => setSaving(false));
+            }}
+            className="flex items-center gap-2 bg-emerald-600 hover:bg-emerald-700 text-white px-5 py-2 rounded-lg font-bold shadow-md transition-all active:scale-95"
+          >
+            <Save size={18} /> {saving ? '저장 중...' : '저장'}
+          </button>
             <Plus size={18} /> 배너 추가
           </button>
         </div>
