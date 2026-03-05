@@ -9,7 +9,10 @@ import {
   ChevronRight,
   Layout,
   AlertCircle,
-  Save
+  Save,
+  Pencil,
+  Check,
+  X
 } from 'lucide-react';
 
 const SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbzoHeSt4DxT1m1Oqwiromcldeso49DHDJCtH_JVzVMuKJ2b5Q1GEMig4R_vmvVL-nUMaQ/exec';
@@ -28,8 +31,12 @@ const App = () => {
     DEFAULT_SLOTS.reduce((acc, slot) => ({ ...acc, [slot]: true }), {})
   );
 
+  // 인라인 편집 상태: { id, field: 'name'|'dept' }
+  const [editingCell, setEditingCell] = useState(null);
+  const [editValue, setEditValue] = useState('');
+  const editInputRef = useRef(null);
+
   const slotRefs = useRef({});
-  const isFirstRender = useRef(true);
 
   useEffect(() => {
     fetch(SCRIPT_URL)
@@ -42,6 +49,14 @@ const App = () => {
       })
       .catch(() => setLoading(false));
   }, []);
+
+  // 편집 인풋 자동 포커스
+  useEffect(() => {
+    if (editingCell && editInputRef.current) {
+      editInputRef.current.focus();
+      editInputRef.current.select();
+    }
+  }, [editingCell]);
 
   const checkCollision = useMemo(() => {
     const collisions = {};
@@ -113,6 +128,7 @@ const App = () => {
   const [dropTargetSlot, setDropTargetSlot] = useState(null);
 
   const handleMouseDown = (e, banner, type) => {
+    if (editingCell) return;
     e.stopPropagation();
     const slotLayouts = {};
     displaySlots.forEach(slot => {
@@ -175,6 +191,28 @@ const App = () => {
     };
   }, [dragging]);
 
+  // 편집 시작
+  const startEdit = (e, banner, field) => {
+    e.stopPropagation();
+    e.preventDefault();
+    setEditingCell({ id: banner.id, field });
+    setEditValue(field === 'name' ? banner.name : (banner.dept || ''));
+  };
+
+  // 편집 저장
+  const commitEdit = () => {
+    if (!editingCell) return;
+    setBanners(prev => prev.map(b =>
+      b.id === editingCell.id ? { ...b, [editingCell.field]: editValue } : b
+    ));
+    setEditingCell(null);
+  };
+
+  // 편집 취소
+  const cancelEdit = () => {
+    setEditingCell(null);
+  };
+
   if (loading) {
     return (
       <div className="flex items-center justify-center h-screen bg-gray-50">
@@ -188,6 +226,7 @@ const App = () => {
 
   return (
     <div className={`flex flex-col h-screen bg-gray-50 text-slate-800 overflow-hidden font-sans select-none ${dragging ? 'cursor-grabbing' : ''}`}>
+
       <div className="flex items-center justify-between px-6 py-4 bg-white border-b shadow-sm z-50">
         <div className="flex items-center gap-6">
           <h1 className="text-xl font-bold text-slate-900 tracking-tight flex items-center gap-2">
@@ -212,9 +251,15 @@ const App = () => {
             }} />
           </div>
         </div>
-<div className="flex items-center gap-3">
+        <div className="flex items-center gap-3">
           <label className="flex items-center gap-2 bg-white border px-4 py-2 rounded-lg text-sm cursor-pointer shadow-sm hover:bg-slate-50 transition-colors">
-            ...
+            <input
+              type="checkbox"
+              checked={showOnlyVisible}
+              onChange={(e) => setShowOnlyVisible(e.target.checked)}
+              className="w-4 h-4 rounded text-blue-600 focus:ring-blue-500 cursor-pointer"
+            />
+            <span className="font-semibold text-slate-600">활성 구좌만 보기</span>
           </label>
           <button
             onClick={() => {
@@ -307,29 +352,113 @@ const App = () => {
                               const duration = Math.round((actualDisplayEnd - actualDisplayStart) / 86400000) + 1;
                               const hasCollision = checkCollision[banner.id];
                               const isDraggingThis = dragging?.id === banner.id;
+                              const isEditingThis = editingCell?.id === banner.id;
+
                               return (
                                 <div
                                   key={banner.id}
-                                  onMouseDown={(e) => handleMouseDown(e, banner, 'move')}
+                                  onMouseDown={(e) => !isEditingThis && handleMouseDown(e, banner, 'move')}
                                   style={{
                                     width: `calc(${duration * 40}px - 4px)`,
                                     backgroundColor: banner.color,
                                     top: '10px', left: '2px',
-                                    zIndex: isDraggingThis ? 1000 : 20,
+                                    zIndex: isDraggingThis ? 1000 : isEditingThis ? 200 : 20,
                                     opacity: isDraggingThis ? 0.8 : 1,
-                                    transform: isDraggingThis ? 'scale(1.02)' : 'none'
+                                    transform: isDraggingThis ? 'scale(1.02)' : 'none',
+                                    minWidth: isEditingThis ? '220px' : undefined,
                                   }}
-                                  className={`absolute h-8 rounded-lg shadow-sm border border-black/10 cursor-grab active:cursor-grabbing flex items-center overflow-hidden transition-all ring-1 ring-inset ${hasCollision ? 'ring-red-500 ring-2' : 'ring-black/5'} ${isDraggingThis ? 'shadow-xl brightness-105' : 'hover:brightness-95'}`}
+                                  className={`absolute h-8 rounded-lg shadow-sm border border-black/10 flex items-center overflow-visible transition-all ring-1 ring-inset group/bar
+                                    ${isEditingThis ? 'cursor-default ring-blue-400 ring-2 shadow-lg' : 'cursor-grab active:cursor-grabbing'}
+                                    ${hasCollision && !isEditingThis ? 'ring-red-500 ring-2' : ''}
+                                    ${isDraggingThis ? 'shadow-xl brightness-105' : !isEditingThis ? 'hover:brightness-95' : ''}`}
                                 >
-                                  <div className="absolute left-0 top-0 w-2 h-full cursor-ew-resize hover:bg-black/10 z-30" onMouseDown={(e) => handleMouseDown(e, banner, 'resize-start')} />
-                                  <div className="flex items-center px-3 w-full h-full pointer-events-none gap-2">
-                                    {hasCollision && <AlertCircle size={12} className="text-red-600 animate-pulse flex-shrink-0" />}
-                                    {banner.dept && (
-                                      <span className="text-[9px] px-1 bg-black/10 rounded font-black text-slate-700 whitespace-nowrap">[{banner.dept}]</span>
-                                    )}
-                                    <span className="text-[11px] font-bold text-slate-800 truncate drop-shadow-sm">{banner.name}</span>
-                                  </div>
-                                  <div className="absolute right-0 top-0 w-2 h-full cursor-ew-resize hover:bg-black/10 z-30" onMouseDown={(e) => handleMouseDown(e, banner, 'resize-end')} />
+                                  {/* 왼쪽 리사이즈 핸들 */}
+                                  {!isEditingThis && (
+                                    <div className="absolute left-0 top-0 w-2 h-full cursor-ew-resize hover:bg-black/10 z-30 rounded-l-lg"
+                                      onMouseDown={(e) => handleMouseDown(e, banner, 'resize-start')} />
+                                  )}
+
+                                  {/* ── 일반 보기 모드 ── */}
+                                  {!isEditingThis && (
+                                    <div className="flex items-center w-full h-full overflow-hidden">
+                                      <div className="flex items-center px-2 gap-1.5 overflow-hidden flex-1 pointer-events-none">
+                                        {hasCollision && <AlertCircle size={12} className="text-red-600 animate-pulse flex-shrink-0" />}
+                                        {banner.dept && (
+                                          <span className="text-[9px] px-1 bg-black/10 rounded font-black text-slate-700 whitespace-nowrap flex-shrink-0">
+                                            [{banner.dept}]
+                                          </span>
+                                        )}
+                                        <span className="text-[11px] font-bold text-slate-800 truncate drop-shadow-sm">{banner.name}</span>
+                                      </div>
+                                      {/* 연필 아이콘 - hover 시 표시 */}
+                                      <button
+                                        onMouseDown={(e) => e.stopPropagation()}
+                                        onClick={(e) => startEdit(e, banner, 'name')}
+                                        className="flex-shrink-0 mr-1 opacity-0 group-hover/bar:opacity-100 transition-opacity bg-white/80 hover:bg-white rounded p-0.5 shadow-sm border border-slate-200/80 z-40"
+                                        title="이름/부서 수정"
+                                      >
+                                        <Pencil size={10} className="text-slate-500" />
+                                      </button>
+                                    </div>
+                                  )}
+
+                                  {/* ── 편집 모드 ── */}
+                                  {isEditingThis && (
+                                    <div
+                                      className="flex items-center w-full h-full px-1.5 gap-1"
+                                      onMouseDown={(e) => e.stopPropagation()}
+                                    >
+                                      {/* dept 인풋 */}
+                                      <input
+                                        className="w-16 h-5 text-[10px] font-black bg-black/10 rounded px-1 outline-none focus:ring-1 focus:ring-blue-400 text-slate-700 placeholder:text-slate-400 flex-shrink-0"
+                                        placeholder="부서"
+                                        value={editingCell.field === 'dept' ? editValue : banner.dept || ''}
+                                        readOnly={editingCell.field !== 'dept'}
+                                        ref={editingCell.field === 'dept' ? editInputRef : null}
+                                        onClick={(e) => { e.stopPropagation(); setEditingCell({ id: banner.id, field: 'dept' }); setEditValue(banner.dept || ''); }}
+                                        onChange={(e) => editingCell.field === 'dept' && setEditValue(e.target.value)}
+                                        onKeyDown={(e) => {
+                                          if (e.key === 'Enter') { commitEdit(); }
+                                          if (e.key === 'Escape') cancelEdit();
+                                          if (e.key === 'Tab') { e.preventDefault(); setEditingCell({ id: banner.id, field: 'name' }); setEditValue(banner.name); }
+                                        }}
+                                      />
+                                      {/* name 인풋 */}
+                                      <input
+                                        className="flex-1 min-w-0 h-5 text-[11px] font-bold bg-white/80 rounded px-1.5 outline-none focus:ring-1 focus:ring-blue-400 text-slate-800 placeholder:text-slate-400"
+                                        placeholder="배너명"
+                                        value={editingCell.field === 'name' ? editValue : banner.name}
+                                        readOnly={editingCell.field !== 'name'}
+                                        ref={editingCell.field === 'name' ? editInputRef : null}
+                                        onClick={(e) => { e.stopPropagation(); setEditingCell({ id: banner.id, field: 'name' }); setEditValue(banner.name); }}
+                                        onChange={(e) => editingCell.field === 'name' && setEditValue(e.target.value)}
+                                        onKeyDown={(e) => {
+                                          if (e.key === 'Enter') commitEdit();
+                                          if (e.key === 'Escape') cancelEdit();
+                                          if (e.key === 'Tab') { e.preventDefault(); setEditingCell({ id: banner.id, field: 'dept' }); setEditValue(banner.dept || ''); }
+                                        }}
+                                      />
+                                      {/* 확인/취소 버튼 */}
+                                      <button
+                                        onClick={(e) => { e.stopPropagation(); commitEdit(); }}
+                                        className="flex-shrink-0 bg-blue-500 hover:bg-blue-600 text-white rounded p-0.5"
+                                      >
+                                        <Check size={11} />
+                                      </button>
+                                      <button
+                                        onClick={(e) => { e.stopPropagation(); cancelEdit(); }}
+                                        className="flex-shrink-0 bg-slate-200 hover:bg-slate-300 text-slate-600 rounded p-0.5"
+                                      >
+                                        <X size={11} />
+                                      </button>
+                                    </div>
+                                  )}
+
+                                  {/* 오른쪽 리사이즈 핸들 */}
+                                  {!isEditingThis && (
+                                    <div className="absolute right-0 top-0 w-2 h-full cursor-ew-resize hover:bg-black/10 z-30 rounded-r-lg"
+                                      onMouseDown={(e) => handleMouseDown(e, banner, 'resize-end')} />
+                                  )}
                                 </div>
                               );
                             })
@@ -380,8 +509,9 @@ const App = () => {
                 {filteredBanners.map(banner => {
                   const status = getStatus(banner.start, banner.end);
                   const hasCollision = checkCollision[banner.id];
+                  const isBeingEdited = editingCell?.id === banner.id;
                   return (
-                    <tr key={banner.id} className={`hover:bg-slate-50/50 transition-colors group ${hasCollision ? 'bg-red-50/30' : ''}`}>
+                    <tr key={banner.id} className={`hover:bg-slate-50/50 transition-colors group ${hasCollision ? 'bg-red-50/30' : ''} ${isBeingEdited ? 'bg-blue-50/40' : ''}`}>
                       <td className="p-4 text-center">
                         <div className="flex flex-col items-center gap-1">
                           <span className={`px-2.5 py-1 rounded-full text-[11px] font-bold border block text-center w-full ${status === '진행중' ? 'bg-emerald-50 text-emerald-600 border-emerald-100' : status === '대기' ? 'bg-blue-50 text-blue-600 border-blue-100' : 'bg-slate-100 text-slate-500 border-slate-200'}`}>
