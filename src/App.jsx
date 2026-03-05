@@ -8,6 +8,31 @@ import {
 const SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbzoHeSt4DxT1m1Oqwiromcldeso49DHDJCtH_JVzVMuKJ2b5Q1GEMig4R_vmvVL-nUMaQ/exec';
 const DEFAULT_SLOTS = ['로고 배너', '레이어', '헤더배너', '강조 no.1 (#1)', '강조 no.1 (#2)', '강조 no.1 (#3)', '강조 no.3 (랜덤)'];
 
+// "2026-03-09T08:00:00.000Z" 또는 "2026-03-09" → "2026-03-09T08:00" 형식으로 정규화
+const normalizeDateTime = (str) => {
+  if (!str) return '';
+  // 이미 datetime-local 형식이면 그대로
+  if (/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}$/.test(str)) return str;
+  // ISO 전체 문자열이면 UTC→로컬 변환 없이 앞 16자리만 사용
+  if (str.length >= 16) return str.slice(0, 16);
+  // 날짜만 있으면 00:00 붙이기
+  if (/^\d{4}-\d{2}-\d{2}$/.test(str)) return `${str}T00:00`;
+  return str;
+};
+
+// 날짜만 추출 (간트차트용)
+const toDateOnly = (str) => {
+  if (!str) return '';
+  return str.slice(0, 10);
+};
+
+// 표시용 포맷 "2026-03-09T08:00" → "03-09 08:00"
+const formatDisplay = (str) => {
+  if (!str) return '';
+  const dt = normalizeDateTime(str);
+  return dt.length >= 16 ? dt.slice(5, 16).replace('T', ' ') : dt.slice(5, 10);
+};
+
 const App = () => {
   const [currentDate, setCurrentDate] = useState(new Date(2026, 2, 5));
   const [showOnlyVisible, setShowOnlyVisible] = useState(false);
@@ -34,13 +59,13 @@ const App = () => {
     const handleBeforeUnload = (e) => {
       if (!hasUnsaved) return;
       e.preventDefault();
-      e.returnValue = '저장하지 않은 변경사항이 있어요. 페이지를 나가면 사라져요!';
+      e.returnValue = '저장하지 않은 변경사항이 있어요!';
     };
     window.addEventListener('beforeunload', handleBeforeUnload);
     return () => window.removeEventListener('beforeunload', handleBeforeUnload);
   }, [hasUnsaved]);
 
-  // 인라인 편집: editingId로 어떤 배너 편집 중인지, editForm으로 name/dept 동시 관리
+  // 인라인 편집
   const [editingId, setEditingId] = useState(null);
   const [editForm, setEditForm] = useState({ name: '', dept: '' });
   const nameInputRef = useRef(null);
@@ -52,7 +77,12 @@ const App = () => {
       .then(res => res.json())
       .then(data => {
         if (data && data.length > 0) {
-          setBanners(data.map(b => ({ ...b, id: String(b.id) })));
+          setBanners(data.map(b => ({
+            ...b,
+            id: String(b.id),
+            start: normalizeDateTime(b.start),
+            end: normalizeDateTime(b.end),
+          })));
         }
         setLoading(false);
         setTimeout(() => { isFirstLoad.current = false; }, 0);
@@ -63,11 +93,8 @@ const App = () => {
       });
   }, []);
 
-  // 편집 모드 진입 시 name 인풋 자동 포커스
   useEffect(() => {
-    if (editingId) {
-      setTimeout(() => nameInputRef.current?.focus(), 0);
-    }
+    if (editingId) setTimeout(() => nameInputRef.current?.focus(), 0);
   }, [editingId]);
 
   const checkCollision = useMemo(() => {
@@ -92,18 +119,30 @@ const App = () => {
     setBanners(prev => prev.map(b => b.slot === oldName ? { ...b, slot: newName } : b));
   };
 
-  const formatDate = (date) => {
+  // 간트 드래그용 날짜 포맷 (날짜만)
+  const formatDateOnly = (date) => {
     const d = new Date(date);
     return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
   };
 
+  // 드래그 시 datetime 유지하면서 날짜만 변경
+  const shiftDateTime = (datetimeStr, daysDiff) => {
+    const d = new Date(datetimeStr);
+    d.setDate(d.getDate() + daysDiff);
+    const yyyy = d.getFullYear();
+    const mm = String(d.getMonth() + 1).padStart(2, '0');
+    const dd = String(d.getDate()).padStart(2, '0');
+    const hh = String(d.getHours()).padStart(2, '0');
+    const min = String(d.getMinutes()).padStart(2, '0');
+    return `${yyyy}-${mm}-${dd}T${hh}:${min}`;
+  };
+
   const getStatus = (startStr, endStr) => {
-    const today = new Date();
-    today.setHours(0, 0, 0, 0);
+    const now = new Date();
     const start = new Date(startStr);
     const end = new Date(endStr);
-    if (end < today) return '종료';
-    if (start > today) return '대기';
+    if (end < now) return '종료';
+    if (start > now) return '대기';
     return '진행중';
   };
 
@@ -153,8 +192,8 @@ const App = () => {
     setDragging({
       id: banner.id, type,
       startX: e.clientX, startY: e.clientY,
-      initialStart: new Date(banner.start),
-      initialEnd: new Date(banner.end),
+      initialStart: banner.start,
+      initialEnd: banner.end,
       initialSlot: banner.slot,
       slotLayouts
     });
@@ -177,19 +216,21 @@ const App = () => {
       }
       setBanners(prev => prev.map(b => {
         if (b.id !== dragging.id) return b;
-        let newStart = new Date(dragging.initialStart);
-        let newEnd = new Date(dragging.initialEnd);
+        let newStart = dragging.initialStart;
+        let newEnd = dragging.initialEnd;
         if (dragging.type === 'move') {
-          newStart.setDate(newStart.getDate() + daysDiff);
-          newEnd.setDate(newEnd.getDate() + daysDiff);
+          newStart = shiftDateTime(dragging.initialStart, daysDiff);
+          newEnd = shiftDateTime(dragging.initialEnd, daysDiff);
         } else if (dragging.type === 'resize-start') {
-          newStart.setDate(newStart.getDate() + daysDiff);
-          if (newStart >= newEnd) newStart = new Date(new Date(newEnd).setDate(newEnd.getDate() - 1));
+          newStart = shiftDateTime(dragging.initialStart, daysDiff);
+          if (new Date(newStart) >= new Date(newEnd))
+            newStart = shiftDateTime(dragging.initialEnd, -1);
         } else if (dragging.type === 'resize-end') {
-          newEnd.setDate(newEnd.getDate() + daysDiff);
-          if (newEnd <= newStart) newEnd = new Date(new Date(newStart).setDate(newStart.getDate() + 1));
+          newEnd = shiftDateTime(dragging.initialEnd, daysDiff);
+          if (new Date(newEnd) <= new Date(newStart))
+            newEnd = shiftDateTime(dragging.initialStart, 1);
         }
-        return { ...b, start: formatDate(newStart), end: formatDate(newEnd), slot: newSlot };
+        return { ...b, start: newStart, end: newEnd, slot: newSlot };
       }));
     };
     const handleMouseUp = () => { setDragging(null); setDropTargetSlot(null); };
@@ -203,7 +244,6 @@ const App = () => {
     };
   }, [dragging]);
 
-  // 편집 시작: name/dept 동시에 editForm에 세팅
   const startEdit = (e, banner) => {
     e.stopPropagation();
     e.preventDefault();
@@ -211,7 +251,6 @@ const App = () => {
     setEditForm({ name: banner.name, dept: banner.dept || '' });
   };
 
-  // 편집 저장: name/dept 동시에 반영
   const commitEdit = () => {
     if (!editingId) return;
     setBanners(prev => prev.map(b =>
@@ -231,6 +270,16 @@ const App = () => {
       setSaving(false);
       setHasUnsaved(false);
     });
+  };
+
+  // 새 배너 기본값: 오늘 00:00 ~ +4일 23:59
+  const makeDefaultDatetime = (addDays = 0, endOfDay = false) => {
+    const d = new Date();
+    d.setDate(d.getDate() + addDays);
+    const yyyy = d.getFullYear();
+    const mm = String(d.getMonth() + 1).padStart(2, '0');
+    const dd = String(d.getDate()).padStart(2, '0');
+    return endOfDay ? `${yyyy}-${mm}-${dd}T23:59` : `${yyyy}-${mm}-${dd}T00:00`;
   };
 
   if (loading) {
@@ -287,12 +336,9 @@ const App = () => {
             <button
               onClick={handleSave}
               className={`flex items-center gap-2 px-5 py-2 rounded-lg font-bold shadow-md transition-all active:scale-95
-                ${saving
-                  ? 'bg-emerald-400 cursor-not-allowed text-white'
-                  : hasUnsaved
-                    ? 'bg-amber-500 hover:bg-amber-600 text-white ring-2 ring-amber-300 ring-offset-1'
-                    : 'bg-emerald-600 hover:bg-emerald-700 text-white'
-                }`}
+                ${saving ? 'bg-emerald-400 cursor-not-allowed text-white'
+                  : hasUnsaved ? 'bg-amber-500 hover:bg-amber-600 text-white ring-2 ring-amber-300 ring-offset-1'
+                  : 'bg-emerald-600 hover:bg-emerald-700 text-white'}`}
             >
               <Save size={18} className={saving ? 'animate-pulse' : hasUnsaved ? 'animate-bounce' : ''} />
               {saving ? '저장 중...' : hasUnsaved ? '저장 필요!' : '저장'}
@@ -304,8 +350,8 @@ const App = () => {
               const id = Date.now().toString();
               setBanners([...banners, {
                 id, name: '새 배너', slot: allSlots[0],
-                start: formatDate(new Date()),
-                end: formatDate(new Date(Date.now() + 86400000 * 4)),
+                start: makeDefaultDatetime(0, false),
+                end: makeDefaultDatetime(4, true),
                 dept: '기타', color: '#E2E8F0', memo: ''
               }]);
             }}
@@ -317,6 +363,8 @@ const App = () => {
       </div>
 
       <div className="flex-1 overflow-auto p-6 space-y-6">
+
+        {/* 간트차트 */}
         <div className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden flex flex-col">
           <div className="overflow-x-auto overflow-y-hidden">
             <table className="w-full border-collapse table-fixed min-w-max">
@@ -326,7 +374,9 @@ const App = () => {
                     구좌 리스트
                   </th>
                   {dateRange.map((date, idx) => (
-                    <th key={idx} className={`w-[40px] border-r p-2 text-center text-xs font-semibold ${date.getDay() === 0 ? 'text-red-500' : date.getDay() === 6 ? 'text-blue-500' : 'text-slate-400'} ${isToday(date) ? 'bg-blue-50' : ''}`}>
+                    <th key={idx} className={`w-[40px] border-r p-2 text-center text-xs font-semibold
+                      ${date.getDay() === 0 ? 'text-red-500' : date.getDay() === 6 ? 'text-blue-500' : 'text-slate-400'}
+                      ${isToday(date) ? 'bg-blue-50' : ''}`}>
                       <div className="opacity-60 mb-1">{['일','월','화','수','목','금','토'][date.getDay()]}</div>
                       <div className={isToday(date) ? 'bg-blue-600 text-white rounded-full w-6 h-6 flex items-center justify-center mx-auto' : ''}>
                         {date.getDate()}
@@ -357,25 +407,29 @@ const App = () => {
                       </button>
                     </td>
                     {dateRange.map((date, idx) => {
-                      const dateStr = formatDate(date);
+                      const dateStr = formatDateOnly(date);
                       return (
                         <td key={idx} className={`border-r relative ${isToday(date) ? 'bg-blue-50/20' : ''}`}>
                           {isToday(date) && <div className="absolute inset-y-0 left-1/2 w-0.5 bg-blue-400/30 z-0 pointer-events-none"></div>}
                           {visibleSlots[slot] && banners
                             .filter(b => {
-                              const bStart = new Date(b.start);
-                              const bEnd = new Date(b.end);
-                              if (bStart < viewStart) {
-                                return b.slot === slot && idx === 0 && bEnd >= viewStart;
+                              const bDateOnly = toDateOnly(b.start);
+                              const bEndOnly = toDateOnly(b.end);
+                              const bStartDate = new Date(bDateOnly);
+                              const viewStartDate = new Date(formatDateOnly(viewStart));
+                              if (bStartDate < viewStartDate) {
+                                return b.slot === slot && idx === 0 && bEndOnly >= formatDateOnly(viewStart);
                               }
-                              return b.slot === slot && b.start === dateStr;
+                              return b.slot === slot && bDateOnly === dateStr;
                             })
                             .map(banner => {
-                              const bStart = new Date(banner.start);
-                              const bEnd = new Date(banner.end);
-                              const actualDisplayStart = bStart < viewStart ? viewStart : bStart;
-                              const actualDisplayEnd = bEnd > viewEnd ? viewEnd : bEnd;
-                              const duration = Math.round((actualDisplayEnd - actualDisplayStart) / 86400000) + 1;
+                              const bStartOnly = toDateOnly(banner.start);
+                              const bEndOnly = toDateOnly(banner.end);
+                              const viewStartStr = formatDateOnly(viewStart);
+                              const viewEndStr = formatDateOnly(viewEnd);
+                              const dispStart = bStartOnly < viewStartStr ? viewStartStr : bStartOnly;
+                              const dispEnd = bEndOnly > viewEndStr ? viewEndStr : bEndOnly;
+                              const duration = Math.round((new Date(dispEnd) - new Date(dispStart)) / 86400000) + 1;
                               const hasCollision = checkCollision[banner.id];
                               const isDraggingThis = dragging?.id === banner.id;
                               const isEditingThis = editingId === banner.id;
@@ -398,13 +452,12 @@ const App = () => {
                                     ${hasCollision && !isEditingThis ? 'ring-red-500 ring-2' : ''}
                                     ${isDraggingThis ? 'shadow-xl brightness-105' : !isEditingThis ? 'hover:brightness-95' : ''}`}
                                 >
-                                  {/* 리사이즈 핸들 (편집 중 비활성) */}
                                   {!isEditingThis && (
                                     <div className="absolute left-0 top-0 w-2 h-full cursor-ew-resize hover:bg-black/10 z-30 rounded-l-lg"
                                       onMouseDown={(e) => handleMouseDown(e, banner, 'resize-start')} />
                                   )}
 
-                                  {/* 일반 보기 모드 */}
+                                  {/* 일반 보기 */}
                                   {!isEditingThis && (
                                     <div className="flex items-center w-full h-full overflow-hidden">
                                       <div className="flex items-center px-2 gap-1.5 overflow-hidden flex-1 pointer-events-none">
@@ -427,13 +480,9 @@ const App = () => {
                                     </div>
                                   )}
 
-                                  {/* 편집 모드: dept + name 동시 편집 */}
+                                  {/* 편집 모드 */}
                                   {isEditingThis && (
-                                    <div
-                                      className="flex items-center w-full h-full px-1.5 gap-1"
-                                      onMouseDown={(e) => e.stopPropagation()}
-                                    >
-                                      {/* 부서 인풋 */}
+                                    <div className="flex items-center w-full h-full px-1.5 gap-1" onMouseDown={(e) => e.stopPropagation()}>
                                       <input
                                         ref={deptInputRef}
                                         className="w-16 h-5 text-[10px] font-black bg-black/10 rounded px-1 outline-none focus:ring-1 focus:ring-blue-400 text-slate-700 placeholder:text-slate-400 flex-shrink-0"
@@ -447,7 +496,6 @@ const App = () => {
                                           if (e.key === 'Tab') { e.preventDefault(); nameInputRef.current?.focus(); }
                                         }}
                                       />
-                                      {/* 배너명 인풋 */}
                                       <input
                                         ref={nameInputRef}
                                         className="flex-1 min-w-0 h-5 text-[11px] font-bold bg-white/80 rounded px-1.5 outline-none focus:ring-1 focus:ring-blue-400 text-slate-800 placeholder:text-slate-400"
@@ -461,18 +509,10 @@ const App = () => {
                                           if (e.key === 'Tab') { e.preventDefault(); deptInputRef.current?.focus(); }
                                         }}
                                       />
-                                      {/* 저장 버튼 */}
-                                      <button
-                                        onClick={(e) => { e.stopPropagation(); commitEdit(); }}
-                                        className="flex-shrink-0 bg-blue-500 hover:bg-blue-600 text-white rounded p-0.5"
-                                      >
+                                      <button onClick={(e) => { e.stopPropagation(); commitEdit(); }} className="flex-shrink-0 bg-blue-500 hover:bg-blue-600 text-white rounded p-0.5">
                                         <Check size={11} />
                                       </button>
-                                      {/* 취소 버튼 */}
-                                      <button
-                                        onClick={(e) => { e.stopPropagation(); cancelEdit(); }}
-                                        className="flex-shrink-0 bg-slate-200 hover:bg-slate-300 text-slate-600 rounded p-0.5"
-                                      >
+                                      <button onClick={(e) => { e.stopPropagation(); cancelEdit(); }} className="flex-shrink-0 bg-slate-200 hover:bg-slate-300 text-slate-600 rounded p-0.5">
                                         <X size={11} />
                                       </button>
                                     </div>
@@ -496,6 +536,7 @@ const App = () => {
           </div>
         </div>
 
+        {/* 하단 리스트 */}
         <div className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden flex flex-col">
           <div className="p-4 border-b flex justify-between items-center bg-white flex-wrap gap-4">
             <h2 className="font-bold text-slate-800 flex items-center gap-2 text-base">
@@ -505,11 +546,8 @@ const App = () => {
             </h2>
             <div className="flex bg-slate-100 p-1 rounded-lg border border-slate-200 shadow-inner">
               {['전체', '진행중', '대기', '종료'].map((tab) => (
-                <button
-                  key={tab}
-                  onClick={() => setActiveTab(tab)}
-                  className={`px-4 py-1.5 rounded-md text-xs font-bold transition-all ${activeTab === tab ? 'bg-white text-blue-600 shadow-sm ring-1 ring-slate-200' : 'text-slate-500 hover:text-slate-700'}`}
-                >
+                <button key={tab} onClick={() => setActiveTab(tab)}
+                  className={`px-4 py-1.5 rounded-md text-xs font-bold transition-all ${activeTab === tab ? 'bg-white text-blue-600 shadow-sm ring-1 ring-slate-200' : 'text-slate-500 hover:text-slate-700'}`}>
                   {tab}
                 </button>
               ))}
@@ -523,7 +561,7 @@ const App = () => {
                   <th className="p-4 min-w-[200px]">배너 명칭</th>
                   <th className="p-4 w-16 text-center">색상</th>
                   <th className="p-4 w-44">노출 구좌</th>
-                  <th className="p-4 w-52 text-center">노출 기간</th>
+                  <th className="p-4 w-80 text-center">노출 기간 (날짜 · 시간)</th>
                   <th className="p-4 w-32 text-left">담당 부서</th>
                   <th className="p-4 w-16 text-center">삭제</th>
                 </tr>
@@ -537,7 +575,10 @@ const App = () => {
                     <tr key={banner.id} className={`hover:bg-slate-50/50 transition-colors group ${hasCollision ? 'bg-red-50/30' : ''} ${isBeingEdited ? 'bg-blue-50/40' : ''}`}>
                       <td className="p-4 text-center">
                         <div className="flex flex-col items-center gap-1">
-                          <span className={`px-2.5 py-1 rounded-full text-[11px] font-bold border block text-center w-full ${status === '진행중' ? 'bg-emerald-50 text-emerald-600 border-emerald-100' : status === '대기' ? 'bg-blue-50 text-blue-600 border-blue-100' : 'bg-slate-100 text-slate-500 border-slate-200'}`}>
+                          <span className={`px-2.5 py-1 rounded-full text-[11px] font-bold border block text-center w-full
+                            ${status === '진행중' ? 'bg-emerald-50 text-emerald-600 border-emerald-100'
+                            : status === '대기' ? 'bg-blue-50 text-blue-600 border-blue-100'
+                            : 'bg-slate-100 text-slate-500 border-slate-200'}`}>
                             {status}
                           </span>
                           {hasCollision && (
@@ -548,23 +589,73 @@ const App = () => {
                         </div>
                       </td>
                       <td className="p-4">
-                        <input className="bg-transparent border-b border-transparent focus:border-blue-500 outline-none font-semibold w-full transition-all py-1" value={banner.name} onChange={(e) => setBanners(prev => prev.map(b => b.id === banner.id ? { ...b, name: e.target.value } : b))} />
+                        <input className="bg-transparent border-b border-transparent focus:border-blue-500 outline-none font-semibold w-full transition-all py-1"
+                          value={banner.name}
+                          onChange={(e) => setBanners(prev => prev.map(b => b.id === banner.id ? { ...b, name: e.target.value } : b))} />
                       </td>
                       <td className="p-4 text-center">
-                        <input type="color" className="w-8 h-8 rounded-lg cursor-pointer border-2 border-white shadow-sm" value={banner.color} onChange={(e) => setBanners(prev => prev.map(b => b.id === banner.id ? { ...b, color: e.target.value } : b))} />
+                        <input type="color" className="w-8 h-8 rounded-lg cursor-pointer border-2 border-white shadow-sm"
+                          value={banner.color}
+                          onChange={(e) => setBanners(prev => prev.map(b => b.id === banner.id ? { ...b, color: e.target.value } : b))} />
                       </td>
                       <td className="p-4">
-                        <select className="bg-white border border-slate-200 rounded-md px-2 py-1.5 text-xs outline-none font-medium cursor-pointer focus:ring-1 focus:ring-blue-500 w-full" value={banner.slot} onChange={(e) => setBanners(prev => prev.map(b => b.id === banner.id ? { ...b, slot: e.target.value } : b))}>
+                        <select className="bg-white border border-slate-200 rounded-md px-2 py-1.5 text-xs outline-none font-medium cursor-pointer focus:ring-1 focus:ring-blue-500 w-full"
+                          value={banner.slot}
+                          onChange={(e) => setBanners(prev => prev.map(b => b.id === banner.id ? { ...b, slot: e.target.value } : b))}>
                           {allSlots.map(s => <option key={s} value={s}>{s}</option>)}
                         </select>
                       </td>
+
+                      {/* 날짜 + 시간 입력 */}
                       <td className="p-4">
-                        <div className="flex items-center justify-center gap-2 text-[11px]">
-                          <input type="date" className="border border-slate-200 rounded px-1.5 py-1 focus:ring-1 focus:ring-blue-500 outline-none w-24" value={banner.start} onChange={(e) => setBanners(prev => prev.map(b => b.id === banner.id ? { ...b, start: e.target.value } : b))} />
-                          <span className="text-slate-400 font-bold">~</span>
-                          <input type="date" className="border border-slate-200 rounded px-1.5 py-1 focus:ring-1 focus:ring-blue-500 outline-none w-24" value={banner.end} onChange={(e) => setBanners(prev => prev.map(b => b.id === banner.id ? { ...b, end: e.target.value } : b))} />
+                        <div className="flex flex-col gap-1.5">
+                          {/* 시작 */}
+                          <div className="flex items-center gap-1.5">
+                            <span className="text-[10px] font-black text-slate-400 w-6 text-right flex-shrink-0">시작</span>
+                            <input
+                              type="date"
+                              className="border border-slate-200 rounded px-1.5 py-1 text-[11px] focus:ring-1 focus:ring-blue-500 outline-none"
+                              value={toDateOnly(banner.start)}
+                              onChange={(e) => {
+                                const time = banner.start?.slice(11, 16) || '00:00';
+                                setBanners(prev => prev.map(b => b.id === banner.id ? { ...b, start: `${e.target.value}T${time}` } : b));
+                              }}
+                            />
+                            <input
+                              type="time"
+                              className="border border-slate-200 rounded px-1.5 py-1 text-[11px] focus:ring-1 focus:ring-blue-500 outline-none w-20"
+                              value={banner.start?.slice(11, 16) || '00:00'}
+                              onChange={(e) => {
+                                const date = toDateOnly(banner.start) || toDateOnly(new Date().toISOString());
+                                setBanners(prev => prev.map(b => b.id === banner.id ? { ...b, start: `${date}T${e.target.value}` } : b));
+                              }}
+                            />
+                          </div>
+                          {/* 종료 */}
+                          <div className="flex items-center gap-1.5">
+                            <span className="text-[10px] font-black text-slate-400 w-6 text-right flex-shrink-0">종료</span>
+                            <input
+                              type="date"
+                              className="border border-slate-200 rounded px-1.5 py-1 text-[11px] focus:ring-1 focus:ring-blue-500 outline-none"
+                              value={toDateOnly(banner.end)}
+                              onChange={(e) => {
+                                const time = banner.end?.slice(11, 16) || '23:59';
+                                setBanners(prev => prev.map(b => b.id === banner.id ? { ...b, end: `${e.target.value}T${time}` } : b));
+                              }}
+                            />
+                            <input
+                              type="time"
+                              className="border border-slate-200 rounded px-1.5 py-1 text-[11px] focus:ring-1 focus:ring-blue-500 outline-none w-20"
+                              value={banner.end?.slice(11, 16) || '23:59'}
+                              onChange={(e) => {
+                                const date = toDateOnly(banner.end) || toDateOnly(new Date().toISOString());
+                                setBanners(prev => prev.map(b => b.id === banner.id ? { ...b, end: `${date}T${e.target.value}` } : b));
+                              }}
+                            />
+                          </div>
                         </div>
                       </td>
+
                       <td className="p-4">
                         <input
                           className="bg-slate-100 hover:bg-slate-200 focus:bg-white border border-transparent focus:border-blue-500 rounded px-3 py-1.5 text-[11px] font-bold text-slate-600 w-full text-left transition-all outline-none"
@@ -574,7 +665,8 @@ const App = () => {
                         />
                       </td>
                       <td className="p-4 text-center">
-                        <button onClick={() => setBanners(banners.filter(b => b.id !== banner.id))} className="text-slate-300 hover:text-red-500 transition-colors p-1.5 hover:bg-red-50 rounded-md">
+                        <button onClick={() => setBanners(banners.filter(b => b.id !== banner.id))}
+                          className="text-slate-300 hover:text-red-500 transition-colors p-1.5 hover:bg-red-50 rounded-md">
                           <Trash2 size={16} />
                         </button>
                       </td>
