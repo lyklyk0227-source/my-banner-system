@@ -641,15 +641,13 @@ const MainApp = ({ onLogout }) => {
                               const bEndOnly = toDateOnly(banner.end);
                               const viewStartStr = formatDateOnly(viewStart);
 
-                              // ✅ FIX 2: dispStart는 뷰 클램핑용, 너비는 실제 남은 날짜 기준으로 계산
+                              // 시작일 (뷰 시작보다 앞이면 뷰 시작으로 클램핑)
                               const dispStart = bStartOnly < viewStartStr ? viewStartStr : bStartOnly;
 
-                              // 뷰 끝에서 클램핑하지 않고 실제 종료일까지 너비 계산
-                              const durationDays = Math.round((new Date(bEndOnly) - new Date(dispStart)) / 86400000) + 1;
-                              // 뷰 내 남은 칸 수 (최소 1)
-                              const remainingCols = dateRange.length - idx;
-                              // 실제 길이와 남은 칸 중 더 큰 값 사용 (뷰 밖으로 뻗어나가도록)
-                              const duration = Math.max(1, durationDays);
+                              // 시간 영향 제거: 날짜 문자열을 정오(12:00) 기준으로 파싱해 DST·시간 오차 방지
+                              const startMs = new Date(dispStart + 'T12:00:00').getTime();
+                              const endMs   = new Date(bEndOnly  + 'T12:00:00').getTime();
+                              const duration = Math.max(1, Math.round((endMs - startMs) / 86400000) + 1);
 
                               const hasCollision = collisionInfo[banner.id];
                               const isDraggingThis = dragging?.id === banner.id;
