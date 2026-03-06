@@ -333,8 +333,27 @@ const MainApp = ({ onLogout }) => {
   const nameInputRef = useRef(null);
   const deptInputRef = useRef(null);
   const slotRefs = useRef({});
-  const cellWidthRef = useRef(40); // 드래그 계산용 (ref)
-  const [cellWidth, setCellWidth] = useState(40); // 렌더링용 (state)
+  const cellWidthRef = useRef(40);
+  const [cellWidth, setCellWidth] = useState(40);
+  const ganttContainerRef = useRef(null);
+
+  // 셀 너비 측정 — 로드 후 + 창 리사이즈 시
+  useEffect(() => {
+    const measure = () => {
+      if (!ganttContainerRef.current) return;
+      // 첫 번째 날짜 th 너비 측정
+      const th = ganttContainerRef.current.querySelector('thead th:nth-child(2)');
+      if (th) {
+        const w = th.getBoundingClientRect().width;
+        if (w > 0) { cellWidthRef.current = w; setCellWidth(w); }
+      }
+    };
+    // 로드 직후 + 약간의 딜레이 후 한번 더 (레이아웃 안정화)
+    measure();
+    const t = setTimeout(measure, 100);
+    window.addEventListener('resize', measure);
+    return () => { clearTimeout(t); window.removeEventListener('resize', measure); };
+  }, [loading]);
 
   useEffect(() => {
     fetch(SCRIPT_URL).then(r => r.json()).then(data => {
@@ -595,7 +614,7 @@ const MainApp = ({ onLogout }) => {
 
         {/* 간트차트 */}
         <div className="bg-white rounded-2xl border border-slate-100 shadow-sm overflow-hidden">
-          <div className="overflow-x-auto overflow-y-hidden">
+          <div className="overflow-x-auto overflow-y-hidden" ref={el => { if (el) ganttContainerRef.current = el; }}>
             <table className="w-full border-collapse table-fixed min-w-max">
               <thead>
                 <tr className="border-b border-slate-100">
@@ -642,7 +661,7 @@ const MainApp = ({ onLogout }) => {
                       const cellIsHoliday = HOLIDAYS.has(dateStr);
                       const cellIsRed = date.getDay() === 0 || cellIsHoliday;
                       return (
-                        <td key={idx} ref={idx === 0 ? (el) => { if (el) { const w = el.getBoundingClientRect().width; if (w > 0 && w !== cellWidthRef.current) { cellWidthRef.current = w; setCellWidth(w); } } } : null} style={{borderRight:'1px dashed #e2e8f0'}} className={`relative ${isToday(date) ? 'bg-blue-50/30' : cellIsRed ? 'bg-red-50/30' : ''}`}>
+                        <td key={idx} style={{borderRight:'1px dashed #e2e8f0'}} className={`relative ${isToday(date) ? 'bg-blue-50/30' : cellIsRed ? 'bg-red-50/30' : ''}`}>
                           {isToday(date) && <div className="absolute inset-y-0 left-1/2 w-0.5 bg-blue-400/70 z-0 pointer-events-none" />}
                           {visibleSlots[slot] && banners
                             .filter(b => {
