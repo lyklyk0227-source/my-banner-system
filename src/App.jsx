@@ -337,22 +337,32 @@ const MainApp = ({ onLogout }) => {
   const [cellWidth, setCellWidth] = useState(40);
   const ganttContainerRef = useRef(null);
 
-  // 셀 너비 측정 — 로드 후 + 창 리사이즈 시
+  // 셀 너비 측정 — 브라우저 페인트 후 정확히 측정
   useEffect(() => {
+    if (loading) return; // 로딩 중엔 테이블이 없으므로 스킵
     const measure = () => {
       if (!ganttContainerRef.current) return;
-      // 첫 번째 날짜 th 너비 측정
       const th = ganttContainerRef.current.querySelector('thead th:nth-child(2)');
       if (th) {
         const w = th.getBoundingClientRect().width;
-        if (w > 0) { cellWidthRef.current = w; setCellWidth(w); }
+        if (w > 0 && w !== cellWidthRef.current) {
+          cellWidthRef.current = w;
+          setCellWidth(w);
+        }
       }
     };
-    // 로드 직후 + 약간의 딜레이 후 한번 더 (레이아웃 안정화)
-    measure();
-    const t = setTimeout(measure, 100);
-    window.addEventListener('resize', measure);
-    return () => { clearTimeout(t); window.removeEventListener('resize', measure); };
+    // rAF 2번: 첫 번째 프레임(레이아웃) → 두 번째 프레임(페인트) 후 측정
+    let raf1, raf2;
+    raf1 = requestAnimationFrame(() => {
+      raf2 = requestAnimationFrame(measure);
+    });
+    const onResize = () => requestAnimationFrame(measure);
+    window.addEventListener('resize', onResize);
+    return () => {
+      cancelAnimationFrame(raf1);
+      cancelAnimationFrame(raf2);
+      window.removeEventListener('resize', onResize);
+    };
   }, [loading]);
 
   useEffect(() => {
