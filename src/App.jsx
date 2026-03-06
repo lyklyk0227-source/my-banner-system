@@ -2,11 +2,12 @@ import React, { useState, useEffect, useRef, useMemo } from 'react';
 import {
   Calendar, Plus, Trash2, Eye, EyeOff,
   ChevronLeft, ChevronRight, Layout,
-  AlertCircle, Save, Pencil, Check, X
+  AlertCircle, Pencil, Check, X, Lock, LogOut, Loader
 } from 'lucide-react';
 
 const SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbzoHeSt4DxT1m1Oqwiromcldeso49DHDJCtH_JVzVMuKJ2b5Q1GEMig4R_vmvVL-nUMaQ/exec';
-const DEFAULT_SLOTS = ['로고 배너', '레이어', '헤더배너', '강조 no.1 (#1)', '강조 no.1 (#2)', '강조 no.1 (#3)', '강조 no.3 (랜덤)'];
+const DEFAULT_SLOTS = ['로고 배너', '레이어', '헤더 배너', '강조형 no.1 (#1)', '강조형 no.2 (#2)', '강조형 no.1 (#3)', '강조형 no.2', '강조형 no.3', '띠 배너 (#1)', '띠 배너 (#2)', '플로팅 배너 (#1)', '플로팅 배너 (#2)', '플로팅 배너 (#3)'];
+const PASSWORD = '1004'; // ← 비밀번호 여기서 변경
 
 const normalizeDateTime = (str) => {
   if (!str) return '';
@@ -15,35 +16,117 @@ const normalizeDateTime = (str) => {
   if (/^\d{4}-\d{2}-\d{2}$/.test(str)) return `${str}T00:00`;
   return str;
 };
-
 const toDateOnly = (str) => str ? str.slice(0, 10) : '';
 
-const App = () => {
+/* ─────────────────────────────────────────
+   로그인 화면
+───────────────────────────────────────── */
+const LoginPage = ({ onLogin }) => {
+  const [pw, setPw] = useState('');
+  const [error, setError] = useState(false);
+  const [shake, setShake] = useState(false);
+  const inputRef = useRef(null);
+
+  useEffect(() => { inputRef.current?.focus(); }, []);
+
+  const handleSubmit = () => {
+    if (pw === PASSWORD) {
+      onLogin();
+    } else {
+      setError(true);
+      setShake(true);
+      setPw('');
+      setTimeout(() => setShake(false), 500);
+      setTimeout(() => inputRef.current?.focus(), 10);
+    }
+  };
+
+  return (
+    <div className="min-h-screen bg-gradient-to-br from-slate-50 to-blue-50 flex items-center justify-center">
+      <div className={`bg-white rounded-3xl shadow-xl border border-slate-100 px-10 py-12 w-full max-w-sm transition-all ${shake ? 'animate-bounce' : ''}`}
+        style={shake ? { animation: 'shake 0.4s ease' } : {}}>
+        <style>{`
+          @keyframes shake {
+            0%,100%{transform:translateX(0)}
+            20%{transform:translateX(-8px)}
+            40%{transform:translateX(8px)}
+            60%{transform:translateX(-6px)}
+            80%{transform:translateX(6px)}
+          }
+        `}</style>
+        <div className="text-center mb-8">
+          <div className="text-4xl mb-3">🍦</div>
+          <h1 className="text-xl font-bold text-slate-800">배너 관리</h1>
+          <p className="text-xs text-slate-400 mt-1">i-Scream Banner Management</p>
+        </div>
+        <div className="space-y-4">
+          <div className="relative">
+            <Lock size={14} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-300" />
+            <input
+              ref={inputRef}
+              type="password"
+              placeholder="비밀번호를 입력하세요"
+              value={pw}
+              onChange={(e) => { setPw(e.target.value); setError(false); }}
+              onKeyDown={(e) => e.key === 'Enter' && handleSubmit()}
+              className={`w-full pl-9 pr-4 py-3 rounded-xl border text-sm outline-none transition-all
+                ${error ? 'border-red-300 bg-red-50 focus:ring-2 focus:ring-red-200' : 'border-slate-200 focus:border-blue-400 focus:ring-2 focus:ring-blue-100'}`}
+            />
+          </div>
+          {error && <p className="text-xs text-red-400 text-center font-medium">비밀번호가 올바르지 않아요</p>}
+          <button onClick={handleSubmit}
+            className="w-full bg-blue-500 hover:bg-blue-600 active:scale-95 text-white py-3 rounded-xl text-sm font-bold transition-all shadow-sm">
+            입장하기
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+};
+
+/* ─────────────────────────────────────────
+   메인 앱
+───────────────────────────────────────── */
+const MainApp = ({ onLogout }) => {
   const [currentDate, setCurrentDate] = useState(new Date());
   const [showOnlyVisible, setShowOnlyVisible] = useState(false);
   const [activeTab, setActiveTab] = useState('전체');
+  const [currentPage, setCurrentPage] = useState(1);
+  const PAGE_SIZE = 10;
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
-  const [hasUnsaved, setHasUnsaved] = useState(false);
+  const [saveStatus, setSaveStatus] = useState('idle'); // idle | saving | saved | error
 
   const [allSlots, setAllSlots] = useState(DEFAULT_SLOTS);
   const [banners, setBanners] = useState([]);
   const [visibleSlots, setVisibleSlots] = useState(
-    DEFAULT_SLOTS.reduce((acc, slot) => ({ ...acc, [slot]: true }), {})
+    DEFAULT_SLOTS.reduce((acc, s) => ({ ...acc, [s]: true }), {})
   );
 
   const isFirstLoad = useRef(true);
+  const bannersRef = useRef([]);
 
-  useEffect(() => {
-    if (isFirstLoad.current) return;
-    setHasUnsaved(true);
-  }, [banners]);
+  const updateBanners = (fn) => {
+    setBanners(prev => {
+      const next = typeof fn === 'function' ? fn(prev) : fn;
+      bannersRef.current = next;
+      return next;
+    });
+  };
 
+  // 30초마다 자동저장
   useEffect(() => {
-    const fn = (e) => { if (!hasUnsaved) return; e.preventDefault(); e.returnValue = '저장하지 않은 변경사항이 있어요!'; };
-    window.addEventListener('beforeunload', fn);
-    return () => window.removeEventListener('beforeunload', fn);
-  }, [hasUnsaved]);
+    const interval = setInterval(() => {
+      if (isFirstLoad.current || bannersRef.current.length === 0) return;
+      setSaveStatus('saving');
+      setSaving(true);
+      fetch(SCRIPT_URL, { method: 'POST', body: JSON.stringify({ action: 'save', data: bannersRef.current }) })
+        .then(() => { setSaveStatus('saved'); setTimeout(() => setSaveStatus('idle'), 2000); })
+        .catch(() => { setSaveStatus('error'); })
+        .finally(() => setSaving(false));
+    }, 30000);
+    return () => clearInterval(interval);
+  }, []);
 
   const [editingId, setEditingId] = useState(null);
   const [editForm, setEditForm] = useState({ name: '', dept: '' });
@@ -52,13 +135,13 @@ const App = () => {
   const slotRefs = useRef({});
 
   useEffect(() => {
-    fetch(SCRIPT_URL).then(res => res.json()).then(data => {
+    fetch(SCRIPT_URL).then(r => r.json()).then(data => {
       if (data && data.length > 0) {
         setBanners(data.map(b => ({ ...b, id: String(b.id), start: normalizeDateTime(b.start), end: normalizeDateTime(b.end) })));
       }
       setLoading(false);
-      setTimeout(() => { isFirstLoad.current = false; }, 0);
-    }).catch(() => { setLoading(false); setTimeout(() => { isFirstLoad.current = false; }, 0); });
+      setTimeout(() => { isFirstLoad.current = false; }, 100);
+    }).catch(() => { setLoading(false); setTimeout(() => { isFirstLoad.current = false; }, 100); });
   }, []);
 
   useEffect(() => { if (editingId) setTimeout(() => nameInputRef.current?.focus(), 0); }, [editingId]);
@@ -79,7 +162,7 @@ const App = () => {
   const handleSlotNameChange = (oldName, newName) => {
     if (!newName || oldName === newName) return;
     setAllSlots(prev => prev.map(s => s === oldName ? newName : s));
-    setBanners(prev => prev.map(b => b.slot === oldName ? { ...b, slot: newName } : b));
+    updateBanners(prev => prev.map(b => b.slot === oldName ? { ...b, slot: newName } : b));
   };
 
   const formatDateOnly = (date) => {
@@ -109,14 +192,11 @@ const App = () => {
   }, [currentDate]);
 
   const viewStart = dateRange[0], viewEnd = dateRange[dateRange.length-1];
-
-  const isToday = (date) => {
-    const n = new Date();
-    return date.getFullYear()===n.getFullYear() && date.getMonth()===n.getMonth() && date.getDate()===n.getDate();
-  };
-
+  const isToday = (date) => { const n = new Date(); return date.getFullYear()===n.getFullYear()&&date.getMonth()===n.getMonth()&&date.getDate()===n.getDate(); };
   const displaySlots = showOnlyVisible ? allSlots.filter(s => visibleSlots[s]) : allSlots;
   const filteredBanners = banners.filter(b => activeTab === '전체' || getStatus(b.start, b.end) === activeTab);
+  const totalPages = Math.ceil(filteredBanners.length / PAGE_SIZE);
+  const pagedBanners = filteredBanners.slice((currentPage - 1) * PAGE_SIZE, currentPage * PAGE_SIZE);
 
   const [dragging, setDragging] = useState(null);
   const [dropTargetSlot, setDropTargetSlot] = useState(null);
@@ -153,20 +233,20 @@ const App = () => {
         return { ...b, start: ns, end: ne, slot: newSlot };
       }));
     };
-    const onUp = () => { setDragging(null); setDropTargetSlot(null); };
+    const onUp = () => {
+      setDragging(null); setDropTargetSlot(null);
+    };
     if (dragging) { window.addEventListener('mousemove', onMove); window.addEventListener('mouseup', onUp); }
     return () => { window.removeEventListener('mousemove', onMove); window.removeEventListener('mouseup', onUp); };
   }, [dragging]);
 
   const startEdit = (e, banner) => { e.stopPropagation(); e.preventDefault(); setEditingId(banner.id); setEditForm({ name: banner.name, dept: banner.dept || '' }); };
-  const commitEdit = () => { if (!editingId) return; setBanners(prev => prev.map(b => b.id === editingId ? { ...b, name: editForm.name, dept: editForm.dept } : b)); setEditingId(null); };
-  const cancelEdit = () => setEditingId(null);
-
-  const handleSave = () => {
-    setSaving(true);
-    fetch(SCRIPT_URL, { method: 'POST', body: JSON.stringify({ action: 'save', data: banners }) })
-      .finally(() => { setSaving(false); setHasUnsaved(false); });
+  const commitEdit = () => {
+    if (!editingId) return;
+    updateBanners(prev => prev.map(b => b.id === editingId ? { ...b, name: editForm.name, dept: editForm.dept } : b));
+    setEditingId(null);
   };
+  const cancelEdit = () => setEditingId(null);
 
   const makeDefaultDatetime = (addDays = 0, endOfDay = false) => {
     const d = new Date(); d.setDate(d.getDate() + addDays);
@@ -203,36 +283,29 @@ const App = () => {
               onClick={() => { const d = new Date(currentDate); d.setMonth(d.getMonth()+1); setCurrentDate(d); }} />
           </div>
         </div>
-        <div className="flex items-center gap-2.5">
-          {hasUnsaved && !saving && (
-            <span className="text-[11px] text-amber-500 font-semibold flex items-center gap-1 bg-amber-50 px-2.5 py-1 rounded-full border border-amber-200">
-              <span className="w-1.5 h-1.5 rounded-full bg-amber-400 animate-pulse inline-block" />
-              저장되지 않은 변경사항
-            </span>
-          )}
+
+        <div className="flex items-center gap-3">
+          {/* 자동저장 상태 */}
+          <div className="flex items-center gap-1.5 text-xs">
+            {saveStatus === 'saving' && <><Loader size={11} className="text-blue-400 animate-spin" /><span className="text-slate-400">저장 중...</span></>}
+            {saveStatus === 'saved' && <><span className="w-1.5 h-1.5 rounded-full bg-emerald-400 inline-block" /><span className="text-emerald-500 font-medium">저장됨</span></>}
+            {saveStatus === 'error' && <><span className="w-1.5 h-1.5 rounded-full bg-red-400 inline-block" /><span className="text-red-400 font-medium">저장 실패</span></>}
+          </div>
+
           <label className="flex items-center gap-1.5 text-xs text-slate-500 cursor-pointer font-medium">
             <input type="checkbox" checked={showOnlyVisible} onChange={(e) => setShowOnlyVisible(e.target.checked)} className="w-3.5 h-3.5 rounded cursor-pointer" />
             활성 구좌만 보기
           </label>
-          <div className="relative">
-            {hasUnsaved && !saving && (
-              <span className="absolute -top-1 -right-1 flex h-3 w-3 z-10">
-                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-amber-400 opacity-75" />
-                <span className="relative inline-flex rounded-full h-3 w-3 bg-amber-400" />
-              </span>
-            )}
-            <button onClick={handleSave}
-              className={`flex items-center gap-1.5 px-4 py-1.5 rounded-full text-xs font-bold shadow-sm transition-all active:scale-95
-                ${saving ? 'bg-emerald-300 cursor-not-allowed text-white' : hasUnsaved ? 'bg-amber-500 hover:bg-amber-600 text-white' : 'bg-emerald-500 hover:bg-emerald-600 text-white'}`}>
-              <Save size={13} className={saving ? 'animate-pulse' : ''} />
-              {saving ? '저장 중...' : hasUnsaved ? '저장 필요!' : '저장'}
-            </button>
-          </div>
+
           <button onClick={() => {
             const id = Date.now().toString();
-            setBanners([...banners, { id, name: '새 배너', slot: allSlots[0], start: makeDefaultDatetime(0), end: makeDefaultDatetime(4, true), dept: '', color: '#DBEAFE', memo: '' }]);
+            updateBanners(prev => [...prev, { id, name: '새 배너', slot: allSlots[0], start: makeDefaultDatetime(0), end: makeDefaultDatetime(4, true), dept: '', color: '#DBEAFE', memo: '' }]);
           }} className="flex items-center gap-1.5 bg-blue-500 hover:bg-blue-600 text-white px-4 py-1.5 rounded-full text-xs font-bold shadow-sm transition-all active:scale-95">
             <Plus size={13} /> 배너 추가
+          </button>
+
+          <button onClick={onLogout} className="flex items-center gap-1 text-slate-300 hover:text-slate-500 transition-colors p-1.5 rounded-lg hover:bg-slate-100" title="로그아웃">
+            <LogOut size={14} />
           </button>
         </div>
       </div>
@@ -267,8 +340,8 @@ const App = () => {
               <tbody>
                 {displaySlots.map(slot => (
                   <tr key={slot} ref={el => slotRefs.current[slot] = el}
-                    className={`h-12 border-b border-slate-50 transition-colors ${visibleSlots[slot] ? '' : 'opacity-25'} ${dropTargetSlot === slot ? 'bg-blue-50/40' : ''}`}>
-                    <td className={`sticky left-0 z-30 border-r border-slate-100 px-3 h-12 shadow-[1px_0_0_0_#f1f5f9] transition-colors ${dropTargetSlot === slot ? 'bg-blue-50' : 'bg-white'}`}>
+                    className={`h-8 border-b border-slate-50 transition-colors ${visibleSlots[slot] ? '' : 'opacity-25'} ${dropTargetSlot === slot ? 'bg-blue-50/40' : ''}`}>
+                    <td className={`sticky left-0 z-30 border-r border-slate-100 px-3 h-8 shadow-[1px_0_0_0_#f1f5f9] transition-colors ${dropTargetSlot === slot ? 'bg-blue-50' : 'bg-white'}`}>
                       <div className="flex items-center justify-between gap-1">
                         <input className={`text-xs font-semibold bg-transparent outline-none focus:bg-slate-50 rounded px-1 w-full transition-all ${visibleSlots[slot] ? 'text-slate-500' : 'text-slate-300 line-through'}`}
                           defaultValue={slot}
@@ -309,7 +382,7 @@ const App = () => {
                                   style={{
                                     width: `calc(${duration * 40}px - 6px)`,
                                     backgroundColor: banner.color || '#DBEAFE',
-                                    top: '8px', left: '3px', height: '28px',
+                                    top: '5px', left: '3px', height: '22px',
                                     zIndex: isDraggingThis ? 1000 : isEditingThis ? 200 : 20,
                                     opacity: isDraggingThis ? 0.85 : 1,
                                     transform: isDraggingThis ? 'scale(1.02) translateY(-1px)' : 'none',
@@ -324,8 +397,6 @@ const App = () => {
                                     <div className="absolute left-0 top-0 w-2 h-full cursor-ew-resize z-30 rounded-l-xl" onMouseDown={(e) => handleMouseDown(e, banner, 'resize-start')} />
                                     <div className="absolute right-0 top-0 w-2 h-full cursor-ew-resize z-30 rounded-r-xl" onMouseDown={(e) => handleMouseDown(e, banner, 'resize-end')} />
                                   </>}
-
-                                  {/* 일반 보기 */}
                                   {!isEditingThis && (
                                     <div className="flex items-center w-full h-full px-2 gap-1.5">
                                       <svg width="7" height="11" viewBox="0 0 7 11" fill="currentColor" className="flex-shrink-0 text-slate-500/50 pointer-events-none">
@@ -335,28 +406,21 @@ const App = () => {
                                       </svg>
                                       <div className="flex items-center gap-1.5 flex-1 min-w-0 overflow-hidden pointer-events-none">
                                         {hasCollision && <AlertCircle size={11} className="text-red-500 animate-pulse flex-shrink-0" />}
-                                        {banner.dept && (
-                                          <span className="text-[9px] px-1.5 py-0.5 bg-black/10 rounded-full font-bold text-slate-600 whitespace-nowrap flex-shrink-0">
-                                            {banner.dept}
-                                          </span>
-                                        )}
+                                        {banner.dept && <span className="text-[9px] px-1.5 py-0.5 bg-black/10 rounded-full font-bold text-slate-600 whitespace-nowrap flex-shrink-0">{banner.dept}</span>}
                                         <span className="text-[11px] font-semibold text-slate-700 truncate">{banner.name}</span>
                                       </div>
+                                      {/* 메모 점 - 연필 왼쪽에 나란히 */}
+                                      {banner.memo && (
+                                        <div className="flex-shrink-0 pointer-events-none">
+                                          <div className="w-1.5 h-1.5 rounded-full bg-orange-400 shadow-sm" />
+                                        </div>
+                                      )}
                                       <button onMouseDown={(e) => e.stopPropagation()} onClick={(e) => startEdit(e, banner)}
-                                        className="flex-shrink-0 opacity-0 group-hover/bar:opacity-100 transition-opacity bg-white/90 hover:bg-white rounded-md p-0.5 shadow-sm border border-black/5 z-40">
+                                        className="flex-shrink-0 opacity-40 group-hover/bar:opacity-100 transition-opacity bg-white/70 hover:bg-white rounded-md p-0.5 shadow-sm border border-black/10 z-40">
                                         <Pencil size={10} className="text-slate-500" />
                                       </button>
                                     </div>
                                   )}
-
-                                  {/* 메모 주황 점 */}
-                                  {!isEditingThis && banner.memo && (
-                                    <div className="absolute top-1 right-1.5 z-40 pointer-events-none">
-                                      <div className="w-2 h-2 rounded-full bg-orange-400 shadow-sm" />
-                                    </div>
-                                  )}
-
-                                  {/* 호버 툴팁 */}
                                   {!isEditingThis && (
                                     <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 hidden group-hover/bar:block z-50 pointer-events-none">
                                       <div className="bg-slate-800 text-white text-[11px] rounded-xl px-3 py-2 shadow-xl max-w-[240px] leading-relaxed text-center">
@@ -366,8 +430,6 @@ const App = () => {
                                       <div className="w-2 h-2 bg-slate-800 rotate-45 mx-auto -mt-1" />
                                     </div>
                                   )}
-
-                                  {/* 편집 모드 */}
                                   {isEditingThis && (
                                     <div className="flex items-center w-full h-full px-1.5 gap-1" onMouseDown={(e) => e.stopPropagation()}>
                                       <input ref={deptInputRef} className="w-16 h-5 text-[10px] font-bold bg-black/10 rounded-lg px-1.5 outline-none focus:ring-1 focus:ring-blue-400 text-slate-700 placeholder:text-slate-400 flex-shrink-0"
@@ -407,7 +469,7 @@ const App = () => {
             </h2>
             <div className="flex bg-slate-50 p-1 rounded-xl border border-slate-100">
               {['전체','진행중','대기','종료'].map(tab => (
-                <button key={tab} onClick={() => setActiveTab(tab)}
+                <button key={tab} onClick={() => { setActiveTab(tab); setCurrentPage(1); }}
                   className={`px-3 py-1 rounded-lg text-xs font-bold transition-all ${activeTab === tab ? 'bg-white text-blue-500 shadow-sm' : 'text-slate-400 hover:text-slate-600'}`}>
                   {tab}
                 </button>
@@ -424,7 +486,7 @@ const App = () => {
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-50 text-sm">
-                {filteredBanners.map(banner => {
+                {pagedBanners.map(banner => {
                   const status = getStatus(banner.start, banner.end);
                   const hasCollision = collisionInfo[banner.id];
                   const isBeingEdited = editingId === banner.id;
@@ -436,58 +498,58 @@ const App = () => {
                             ${status==='진행중' ? 'bg-emerald-50 text-emerald-500' : status==='대기' ? 'bg-blue-50 text-blue-500' : 'bg-slate-100 text-slate-400'}`}>
                             {status}
                           </span>
-                          {hasCollision && (
-                            <span className="text-[9px] font-bold text-red-400 flex items-center gap-0.5 whitespace-nowrap">
-                              <AlertCircle size={9} /> 일정 중첩
-                            </span>
-                          )}
+                          {hasCollision && <span className="text-[9px] font-bold text-red-400 flex items-center gap-0.5 whitespace-nowrap"><AlertCircle size={9} /> 일정 중첩</span>}
                         </div>
                       </td>
                       <td className="px-3 py-3">
                         <input className="bg-transparent border-b border-transparent focus:border-blue-400 outline-none font-semibold text-sm text-slate-700 w-full transition-all py-0.5 min-w-[120px]"
-                          value={banner.name} onChange={(e) => setBanners(prev => prev.map(b => b.id===banner.id ? {...b, name: e.target.value} : b))} />
+                          value={banner.name}
+                          onChange={(e) => updateBanners(prev => prev.map(b => b.id===banner.id ? {...b, name: e.target.value} : b))} />
                       </td>
                       <td className="px-3 py-3">
                         <input className="bg-slate-50 hover:bg-slate-100 focus:bg-white border border-slate-100 focus:border-blue-300 rounded-lg px-2 py-1 text-xs font-semibold text-slate-600 w-full text-center transition-all outline-none placeholder:text-slate-300"
                           value={banner.dept||''} placeholder="부서"
-                          onChange={(e) => setBanners(prev => prev.map(b => b.id===banner.id ? {...b, dept: e.target.value} : b))} />
+                          onChange={(e) => updateBanners(prev => prev.map(b => b.id===banner.id ? {...b, dept: e.target.value} : b))} />
                       </td>
                       <td className="px-3 py-3 text-center">
                         <input type="color" className="w-7 h-7 rounded-lg cursor-pointer border-2 border-white shadow-sm"
-                          value={banner.color} onChange={(e) => setBanners(prev => prev.map(b => b.id===banner.id ? {...b, color: e.target.value} : b))} />
+                          value={banner.color}
+                          onChange={(e) => updateBanners(prev => prev.map(b => b.id===banner.id ? {...b, color: e.target.value} : b))} />
                       </td>
                       <td className="px-3 py-3">
                         <select className="bg-white border border-slate-100 rounded-lg px-2 py-1 text-xs outline-none font-medium cursor-pointer focus:ring-1 focus:ring-blue-400 w-full"
-                          value={banner.slot} onChange={(e) => setBanners(prev => prev.map(b => b.id===banner.id ? {...b, slot: e.target.value} : b))}>
+                          value={banner.slot}
+                          onChange={(e) => updateBanners(prev => prev.map(b => b.id===banner.id ? {...b, slot: e.target.value} : b))}>
                           {allSlots.map(s => <option key={s} value={s}>{s}</option>)}
                         </select>
                       </td>
-                      <td className="px-3 py-3">
-                        <div className="flex items-center gap-1.5 flex-nowrap">
-                          <span className="text-[10px] font-bold text-slate-300 whitespace-nowrap">시작</span>
-                          <input type="date" className="border border-slate-100 rounded-lg px-1.5 py-1 text-xs focus:ring-1 focus:ring-blue-400 outline-none"
+                      {/* 노출 기간 - 시간 잘림 수정: flex-nowrap + 충분한 너비 확보 */}
+                      <td className="px-3 py-3 whitespace-nowrap">
+                        <div className="flex items-center gap-1 flex-nowrap">
+                          <span className="text-[10px] font-bold text-slate-300 flex-shrink-0">시작</span>
+                          <input type="date" className="border border-slate-100 rounded-lg px-1.5 py-1 text-xs focus:ring-1 focus:ring-blue-400 outline-none flex-shrink-0"
                             value={toDateOnly(banner.start)}
-                            onChange={(e) => { const t=banner.start?.slice(11,16)||'00:00'; setBanners(prev => prev.map(b => b.id===banner.id ? {...b, start:`${e.target.value}T${t}`} : b)); }} />
-                          <input type="time" className="border border-slate-100 rounded-lg px-1.5 py-1 text-xs focus:ring-1 focus:ring-blue-400 outline-none w-24"
+                            onChange={(e) => { const t=banner.start?.slice(11,16)||'00:00'; updateBanners(prev => prev.map(b => b.id===banner.id ? {...b, start:`${e.target.value}T${t}`} : b)); }} />
+                          <input type="time" className="border border-slate-100 rounded-lg px-1.5 py-1 text-xs focus:ring-1 focus:ring-blue-400 outline-none flex-shrink-0 w-[90px]"
                             value={banner.start?.slice(11,16)||'00:00'}
-                            onChange={(e) => { const d=toDateOnly(banner.start); setBanners(prev => prev.map(b => b.id===banner.id ? {...b, start:`${d}T${e.target.value}`} : b)); }} />
-                          <span className="text-slate-200 font-bold flex-shrink-0">~</span>
-                          <span className="text-[10px] font-bold text-slate-300 whitespace-nowrap">종료</span>
-                          <input type="date" className="border border-slate-100 rounded-lg px-1.5 py-1 text-xs focus:ring-1 focus:ring-blue-400 outline-none"
+                            onChange={(e) => { const d=toDateOnly(banner.start); updateBanners(prev => prev.map(b => b.id===banner.id ? {...b, start:`${d}T${e.target.value}`} : b)); }} />
+                          <span className="text-slate-300 font-bold flex-shrink-0 px-0.5">~</span>
+                          <span className="text-[10px] font-bold text-slate-300 flex-shrink-0">종료</span>
+                          <input type="date" className="border border-slate-100 rounded-lg px-1.5 py-1 text-xs focus:ring-1 focus:ring-blue-400 outline-none flex-shrink-0"
                             value={toDateOnly(banner.end)}
-                            onChange={(e) => { const t=banner.end?.slice(11,16)||'23:59'; setBanners(prev => prev.map(b => b.id===banner.id ? {...b, end:`${e.target.value}T${t}`} : b)); }} />
-                          <input type="time" className="border border-slate-100 rounded-lg px-1.5 py-1 text-xs focus:ring-1 focus:ring-blue-400 outline-none w-24"
+                            onChange={(e) => { const t=banner.end?.slice(11,16)||'23:59'; updateBanners(prev => prev.map(b => b.id===banner.id ? {...b, end:`${e.target.value}T${t}`} : b)); }} />
+                          <input type="time" className="border border-slate-100 rounded-lg px-1.5 py-1 text-xs focus:ring-1 focus:ring-blue-400 outline-none flex-shrink-0 w-[90px]"
                             value={banner.end?.slice(11,16)||'23:59'}
-                            onChange={(e) => { const d=toDateOnly(banner.end); setBanners(prev => prev.map(b => b.id===banner.id ? {...b, end:`${d}T${e.target.value}`} : b)); }} />
+                            onChange={(e) => { const d=toDateOnly(banner.end); updateBanners(prev => prev.map(b => b.id===banner.id ? {...b, end:`${d}T${e.target.value}`} : b)); }} />
                         </div>
                       </td>
                       <td className="px-3 py-3">
-                        <input className="bg-slate-50 hover:bg-slate-100 focus:bg-white border border-slate-100 focus:border-blue-300 rounded-lg px-2 py-1 text-xs text-slate-600 w-full transition-all outline-none placeholder:text-slate-300 min-w-[120px]"
+                        <input className="bg-slate-50 hover:bg-slate-100 focus:bg-white border border-slate-100 focus:border-blue-300 rounded-lg px-2 py-1 text-xs text-slate-600 w-full transition-all outline-none placeholder:text-slate-300 min-w-[100px]"
                           value={banner.memo||''} placeholder="메모 입력..."
-                          onChange={(e) => setBanners(prev => prev.map(b => b.id===banner.id ? {...b, memo: e.target.value} : b))} />
+                          onChange={(e) => updateBanners(prev => prev.map(b => b.id===banner.id ? {...b, memo: e.target.value} : b))} />
                       </td>
                       <td className="px-3 py-3 text-center">
-                        <button onClick={() => setBanners(banners.filter(b => b.id !== banner.id))}
+                        <button onClick={() => updateBanners(prev => prev.filter(b => b.id !== banner.id))}
                           className="text-slate-200 hover:text-red-400 transition-colors p-1.5 hover:bg-red-50 rounded-lg">
                           <Trash2 size={14} />
                         </button>
@@ -498,10 +560,38 @@ const App = () => {
               </tbody>
             </table>
           </div>
+          {totalPages > 1 && (
+            <div className="px-5 py-3 border-t border-slate-100 flex items-center justify-between">
+              <span className="text-[11px] text-slate-400">
+                {(currentPage - 1) * PAGE_SIZE + 1}–{Math.min(currentPage * PAGE_SIZE, filteredBanners.length)} / 총 {filteredBanners.length}개
+              </span>
+              <div className="flex items-center gap-1">
+                <button onClick={() => setCurrentPage(p => Math.max(1, p - 1))} disabled={currentPage === 1}
+                  className="w-7 h-7 flex items-center justify-center rounded-lg border border-slate-100 text-slate-400 hover:text-blue-500 hover:border-blue-200 disabled:opacity-30 disabled:cursor-not-allowed transition-all text-xs">‹</button>
+                {Array.from({ length: totalPages }, (_, i) => i + 1).map(p => (
+                  <button key={p} onClick={() => setCurrentPage(p)}
+                    className={`w-7 h-7 flex items-center justify-center rounded-lg text-xs font-bold transition-all ${p === currentPage ? 'bg-blue-500 text-white shadow-sm' : 'border border-slate-100 text-slate-400 hover:text-blue-500 hover:border-blue-200'}`}>
+                    {p}
+                  </button>
+                ))}
+                <button onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))} disabled={currentPage === totalPages}
+                  className="w-7 h-7 flex items-center justify-center rounded-lg border border-slate-100 text-slate-400 hover:text-blue-500 hover:border-blue-200 disabled:opacity-30 disabled:cursor-not-allowed transition-all text-xs">›</button>
+              </div>
+            </div>
+          )}
         </div>
       </div>
     </div>
   );
+};
+
+/* ─────────────────────────────────────────
+   루트
+───────────────────────────────────────── */
+const App = () => {
+  const [loggedIn, setLoggedIn] = useState(false);
+  if (!loggedIn) return <LoginPage onLogin={() => setLoggedIn(true)} />;
+  return <MainApp onLogout={() => setLoggedIn(false)} />;
 };
 
 export default App;
