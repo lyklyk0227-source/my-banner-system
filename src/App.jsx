@@ -5,7 +5,7 @@ import {
   AlertCircle, Pencil, Check, X, Lock, Loader, BookOpen
 } from 'lucide-react';
 
-const SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbzoHeSt4DxT1m1Oqwiromcldeso49DHDJCtH_JVzVMuKJ2b5Q1GEMig4R_vmvVL-nUMaQ/exec';
+const SCRIPT_URL = 'const SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbx0diXr7d94zg5Z79yn62_y3Ln4DV_b7J77k9Mq580GdxBsP3wyhXYRN36OhJlbawJCMg/exec';
 const DEFAULT_SLOTS = ['로고 배너', '레이어', '헤더 배너', '강조형 no.1 (#1)', '강조형 no.2 (#2)', '강조형 no.1 (#3)', '강조형 no.2', '강조형 no.3', '띠 배너 (#1)', '띠 배너 (#2)', '플로팅 배너 (#1)', '플로팅 배너 (#2)', '플로팅 배너 (#3)'];
 const PASSWORD = '1004';
 
