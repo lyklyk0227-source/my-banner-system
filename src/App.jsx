@@ -2,7 +2,7 @@ import React, { useState, useEffect, useRef, useMemo, useCallback } from 'react'
 import {
   Calendar, Plus, Trash2, Eye, EyeOff,
   ChevronLeft, ChevronRight, Layout,
-  AlertCircle, Pencil, Check, X, Lock, Loader, BookOpen
+  AlertCircle, Check, X, Lock, Loader, BookOpen
 } from 'lucide-react';
 
 // Firebase 설정
@@ -24,13 +24,76 @@ const DEFAULT_SLOTS = ['로고 배너', '레이어', '헤더 배너', '강조형
 const PASSWORD = '1004';
 
 const HOLIDAYS = new Set([
-  '2025-01-01','2025-01-28','2025-01-29','2025-01-30','2025-03-01','2025-05-05',
-  '2025-05-06','2025-05-15','2025-06-06','2025-08-15','2025-10-03','2025-10-05',
-  '2025-10-06','2025-10-07','2025-10-09','2025-12-25',
-  '2026-01-01','2026-02-16','2026-02-17','2026-02-18','2026-03-01','2026-03-02',
-  '2026-05-05','2026-05-24','2026-06-06','2026-08-15','2026-08-17','2026-09-24',
-  '2026-09-25','2026-09-26','2026-10-03','2026-10-09','2026-12-25',
+  // 2025 공휴일 및 대체휴무
+  '2025-01-01', // 신정
+  '2025-01-28','2025-01-29','2025-01-30', // 설날
+  '2025-03-01', // 삼일절
+  '2025-05-05', // 어린이날
+  '2025-05-06', // 어린이날 대체
+  '2025-05-15', // 부처님오신날
+  '2025-06-06', // 현충일
+  '2025-08-15', // 광복절
+  '2025-10-03', // 개천절
+  '2025-10-05','2025-10-06','2025-10-07', // 추석
+  '2025-10-08', // 추석 대체
+  '2025-10-09', // 한글날
+  '2025-12-25', // 성탄절
+  // 2026 공휴일 및 대체휴무
+  '2026-01-01', // 신정
+  '2026-02-16','2026-02-17','2026-02-18', // 설날
+  '2026-03-01', // 삼일절
+  '2026-03-02', // 삼일절 대체
+  '2026-05-05', // 어린이날
+  '2026-05-24', // 부처님오신날
+  '2026-06-06', // 현충일
+  '2026-08-15', // 광복절
+  '2026-08-17', // 광복절 대체
+  '2026-09-24','2026-09-25','2026-09-26', // 추석
+  '2026-10-03', // 개천절
+  '2026-10-09', // 한글날
+  '2026-12-25', // 성탄절
+  // 2027 공휴일 및 대체휴무
+  '2027-01-01', // 신정
+  '2027-02-06','2027-02-07','2027-02-08', // 설날
+  '2027-03-01', // 삼일절
+  '2027-05-05', // 어린이날
+  '2027-05-13', // 부처님오신날
+  '2027-06-06', // 현충일
+  '2027-08-15', // 광복절
+  '2027-08-16', // 광복절 대체
+  '2027-09-14','2027-09-15','2027-09-16', // 추석
+  '2027-10-03', // 개천절
+  '2027-10-04', // 개천절 대체
+  '2027-10-09', // 한글날
+  '2027-10-11', // 한글날 대체
+  '2027-12-25', // 성탄절
 ]);
+
+// 배경색 밝기 계산 → 텍스트 색상 결정
+// 구좌 그룹 정의
+const SLOT_GROUPS = [
+  { label: null, slots: ['로고 배너', '레이어', '헤더 배너'] },
+  { label: '강조형', slots: ['강조형 no.1 (#1)', '강조형 no.2 (#2)', '강조형 no.1 (#3)', '강조형 no.2', '강조형 no.3'] },
+  { label: '띠 배너', slots: ['띠 배너 (#1)', '띠 배너 (#2)'] },
+  { label: '플로팅 배너', slots: ['플로팅 배너 (#1)', '플로팅 배너 (#2)', '플로팅 배너 (#3)'] },
+];
+const getSlotGroup = (slot) => SLOT_GROUPS.find(g => g.slots.includes(slot));
+const isFirstInGroup = (slot, allSlots) => {
+  const group = getSlotGroup(slot);
+  if (!group || !group.label) return false;
+  const firstVisible = group.slots.find(s => allSlots.includes(s));
+  return firstVisible === slot;
+};
+
+const getLuma = (hex) => {
+  const h = (hex||'#DBEAFE').replace('#','');
+  const r = parseInt(h.slice(0,2),16)/255;
+  const g = parseInt(h.slice(2,4),16)/255;
+  const b = parseInt(h.slice(4,6),16)/255;
+  const toLinear = c => c <= 0.03928 ? c/12.92 : Math.pow((c+0.055)/1.055,2.4);
+  return 0.2126*toLinear(r) + 0.7152*toLinear(g) + 0.0722*toLinear(b);
+};
+const isDark = (hex) => getLuma(hex) < 0.35;
 
 const normalizeDateTime = (str) => {
   if (!str) return '';
@@ -80,19 +143,18 @@ const ColorPicker = ({ value, onChange }) => {
         <div onMouseDown={(e) => e.stopPropagation()}
           className="fixed bg-white rounded-2xl shadow-xl border border-slate-100 p-2.5 flex items-center gap-1.5"
           style={{ top: pos.top, left: pos.left, transform: 'translateX(-50%)', zIndex: 99999 }}>
-          {PASTEL_COLORS.map(c => (
+          {['#DBEAFE','#EDE9FE','#FCE7F3','#D1FAE5','#FEF3C7','#FFE4E6'].map(c => (
             <button key={c} onClick={(e) => { e.stopPropagation(); onChange(c); setOpen(false); }}
               className={`w-6 h-6 rounded-full border-2 transition-transform hover:scale-110 flex-shrink-0 ${value === c ? 'border-slate-400 scale-110' : 'border-white shadow-sm'}`}
               style={{ backgroundColor: c }} />
           ))}
-          <div className="w-px h-5 bg-slate-200 mx-0.5 flex-shrink-0" />
-          <div className="relative flex-shrink-0" title="다른 색상 선택">
-            <div className="w-6 h-6 rounded-full border-2 border-dashed border-slate-300 flex items-center justify-center cursor-pointer hover:border-slate-400 transition-colors overflow-hidden">
-              <input ref={pickerRef} type="color" value={value} onChange={(e) => onChange(e.target.value)}
-                className="absolute opacity-0 w-full h-full cursor-pointer" />
-              <span className="text-slate-400 text-[10px] font-bold pointer-events-none">+</span>
-            </div>
-          </div>
+          <label className="cursor-pointer flex items-center justify-center w-6 h-6 rounded-full bg-slate-100 hover:bg-slate-200 transition-colors flex-shrink-0" title="직접 선택">
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#64748b" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <circle cx="13.5" cy="6.5" r="1"/><circle cx="17.5" cy="10.5" r="1"/><circle cx="8.5" cy="7.5" r="1"/><circle cx="6.5" cy="12.5" r="1"/>
+              <path d="M12 2C6.5 2 2 6.5 2 12s4.5 10 10 10c.926 0 1.648-.746 1.648-1.688 0-.437-.18-.835-.437-1.125-.29-.289-.438-.652-.438-1.125a1.64 1.64 0 0 1 1.668-1.668h1.996c3.051 0 5.555-2.503 5.555-5.554C21.965 6.012 17.461 2 12 2z"/>
+            </svg>
+            <input type="color" className="sr-only" value={value} onChange={(e) => { onChange(e.target.value); setOpen(false); }} onClick={(e) => e.stopPropagation()}/>
+          </label>
         </div>
       )}
     </div>
@@ -419,17 +481,22 @@ const MainApp = ({ onLogout }) => {
   const [sortBy, setSortBy] = useState('start');
   const [searchQuery, setSearchQuery] = useState('');
   const [highlightedId, setHighlightedId] = useState(null);
+  const [colorPickerId, setColorPickerId] = useState(null);
 
   const displaySlots = showOnlyVisible ? allSlots.filter(s => visibleSlots[s]) : allSlots;
   const filteredBanners = banners
     .filter(b => activeTab === '전체' || getStatus(b.start, b.end) === activeTab)
     .filter(b => !searchQuery || b.name.includes(searchQuery) || (b.dept||'').includes(searchQuery) || b.slot.includes(searchQuery))
     .sort((a, b) => {
-      if (sortBy === 'start') return new Date(a.start) - new Date(b.start);
-      if (sortBy === 'end') return new Date(a.end) - new Date(b.end);
-      if (sortBy === 'name') return a.name.localeCompare(b.name, 'ko');
-      if (sortBy === 'slot') return allSlots.indexOf(a.slot) - allSlots.indexOf(b.slot);
-      if (sortBy === 'status') return getStatus(a.start, a.end).localeCompare(getStatus(b.start, b.end));
+      if (!sortBy) return 0;
+      const key = sortBy.replace('-', '');
+      const dir = sortBy.startsWith('-') ? -1 : 1;
+      if (key === 'start') return dir * (new Date(a.start) - new Date(b.start));
+      if (key === 'end') return dir * (new Date(a.end) - new Date(b.end));
+      if (key === 'name') return dir * a.name.localeCompare(b.name, 'ko');
+      if (key === 'slot') return dir * (allSlots.indexOf(a.slot) - allSlots.indexOf(b.slot));
+      if (key === 'status') return dir * getStatus(a.start, a.end).localeCompare(getStatus(b.start, b.end));
+      if (key === 'dept') return dir * (a.dept||'').localeCompare(b.dept||'', 'ko');
       return 0;
     });
   const totalPages = Math.ceil(filteredBanners.length / PAGE_SIZE);
@@ -658,7 +725,7 @@ const MainApp = ({ onLogout }) => {
                                     transform: isDraggingThis ? 'scale(1.02) translateY(-1px)' : 'none',
                                     minWidth: isEditingThis ? '230px' : undefined,
                                   }}
-                                  className={`absolute rounded-xl flex items-center overflow-hidden transition-all group/bar border border-white/60 shadow-sm
+                                  className={`absolute rounded-xl flex items-center transition-all group/bar border border-white/60 shadow-sm
                                     ${isEditingThis ? 'cursor-default ring-2 ring-blue-400 ring-offset-1' : 'cursor-grab active:cursor-grabbing'}
                                     ${isHighlightedBar && !isEditingThis ? 'ring-2 ring-yellow-400 ring-offset-1 brightness-95' : ''}
                                     ${hasCollision && !isEditingThis ? 'ring-2 ring-red-400 ring-offset-1' : ''}
@@ -669,7 +736,8 @@ const MainApp = ({ onLogout }) => {
                                     <div className="absolute right-0 top-0 w-2 h-full cursor-ew-resize z-30 rounded-r-xl" onMouseDown={(e) => handleMouseDown(e, banner, 'resize-end')} />
                                   </>}
                                   {!isEditingThis && (
-                                    <div className="flex items-center w-full h-full px-2 gap-1.5">
+                                    <div className="flex items-center w-full h-full px-2 gap-1.5"
+                                      onDoubleClick={(e) => startEdit(e, banner)}>
                                       <svg width="7" height="11" viewBox="0 0 7 11" fill="currentColor" className="flex-shrink-0 text-slate-500/50 pointer-events-none">
                                         <circle cx="1.5" cy="1.5" r="1.2"/><circle cx="5.5" cy="1.5" r="1.2"/>
                                         <circle cx="1.5" cy="5.5" r="1.2"/><circle cx="5.5" cy="5.5" r="1.2"/>
@@ -677,43 +745,64 @@ const MainApp = ({ onLogout }) => {
                                       </svg>
                                       <div className="flex items-center gap-1.5 flex-1 min-w-0 overflow-hidden pointer-events-none">
                                         {hasCollision && <AlertCircle size={11} className="text-red-500 animate-pulse flex-shrink-0" />}
-                                        {banner.dept && <span className="text-[9px] px-1.5 py-0.5 bg-black/10 rounded-full font-bold text-slate-600 whitespace-nowrap flex-shrink-0">{banner.dept}</span>}
-                                        <span className="text-[11px] font-semibold text-slate-700 truncate">{banner.name}</span>
+                                        {banner.dept && (() => {
+                                        const dark = isDark(banner.color);
+                                        const bg = dark ? 'rgba(255,255,255,0.2)' : 'rgba(0,0,0,0.12)';
+                                        const txt = dark ? 'rgba(255,255,255,0.9)' : 'rgba(0,0,0,0.5)';
+                                        return <span className="text-[10px] px-1.5 py-0.5 rounded-full font-semibold whitespace-nowrap flex-shrink-0" style={{backgroundColor:bg, color:txt}}>{banner.dept}</span>;
+                                      })()}
+                                        <span className="text-[11px] font-semibold truncate" style={{color: isDark(banner.color) ? 'rgba(255,255,255,0.95)' : 'rgba(30,41,59,0.9)'}}>{banner.name}</span>
                                       </div>
                                       {banner.memo && (
                                         <div className="flex-shrink-0 pointer-events-none">
                                           <div className="w-1.5 h-1.5 rounded-full bg-orange-400 shadow-sm" />
                                         </div>
                                       )}
-                                      <button onMouseDown={(e) => e.stopPropagation()} onClick={(e) => startEdit(e, banner)}
-                                        className="flex-shrink-0 opacity-40 group-hover/bar:opacity-100 transition-opacity bg-white/70 hover:bg-white rounded-md p-0.5 shadow-sm border border-black/10 z-40">
-                                        <Pencil size={10} className="text-slate-500" />
-                                      </button>
                                     </div>
                                   )}
                                   {!isEditingThis && (
-                                    <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 hidden group-hover/bar:block z-50 pointer-events-none">
-                                      <div className="bg-slate-800 text-white text-[11px] rounded-xl px-3 py-2 shadow-xl max-w-[240px] leading-relaxed text-center">
-                                        <div className="font-bold">{banner.name}</div>
-                                        {banner.memo && <div className="text-slate-300 whitespace-pre-wrap mt-0.5">{banner.memo}</div>}
+                                    <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 hidden group-hover/bar:block z-50">
+                                      <div className="bg-slate-800 text-white text-[11px] rounded-xl px-3 py-2 shadow-xl leading-relaxed text-center">
+                                        <div className="font-bold mb-1">{banner.name}</div>
+                                        {banner.memo && <div className="text-slate-300 whitespace-pre-wrap mb-1">{banner.memo}</div>}
+                                        <div className="flex items-center justify-center gap-1.5 pt-1.5 border-t border-white/10">
+                                          {['#DBEAFE','#EDE9FE','#FCE7F3','#D1FAE5','#FEF3C7','#FFE4E6'].map(c => (
+                                            <button key={c}
+                                              onMouseDown={e => e.stopPropagation()}
+                                              onClick={e => { e.stopPropagation(); updateBanners(prev => prev.map(b => b.id===banner.id?{...b,color:c}:b)); }}
+                                              className={`w-4 h-4 rounded-full border-2 transition-transform hover:scale-125 flex-shrink-0 ${banner.color===c?'border-white':'border-white/30'}`}
+                                              style={{backgroundColor:c}}/>
+                                          ))}
+                                        </div>
                                       </div>
                                       <div className="w-2 h-2 bg-slate-800 rotate-45 mx-auto -mt-1" />
                                     </div>
                                   )}
                                   {isEditingThis && (
-                                    <div className="flex items-center w-full h-full px-1.5 gap-1" onMouseDown={(e) => e.stopPropagation()}>
-                                      <input ref={deptInputRef} className="w-16 h-5 text-[10px] font-bold bg-black/10 rounded-lg px-1.5 outline-none focus:ring-1 focus:ring-blue-400 text-slate-700 placeholder:text-slate-400 flex-shrink-0"
+                                    <div className="flex items-center w-full h-full px-1.5 gap-1"
+                                      onMouseDown={(e) => e.stopPropagation()}>
+                                      <input ref={deptInputRef} className="w-14 h-6 text-[10px] font-bold bg-slate-100 rounded-lg px-1.5 outline-none focus:ring-1 focus:ring-blue-400 text-slate-700 placeholder:text-slate-300 flex-shrink-0"
                                         placeholder="부서" value={editForm.dept}
                                         onChange={(e) => setEditForm(f => ({ ...f, dept: e.target.value }))}
                                         onClick={(e) => e.stopPropagation()}
                                         onKeyDown={(e) => { if (e.key==='Enter') commitEdit(); if (e.key==='Escape') cancelEdit(); if (e.key==='Tab') { e.preventDefault(); nameInputRef.current?.focus(); } }} />
-                                      <input ref={nameInputRef} className="flex-1 min-w-0 h-5 text-[11px] font-semibold bg-white/80 rounded-lg px-1.5 outline-none focus:ring-1 focus:ring-blue-400 text-slate-700 placeholder:text-slate-400"
+                                      <input ref={nameInputRef} className="w-32 h-6 text-[11px] font-semibold bg-slate-100 rounded-lg px-1.5 outline-none focus:ring-1 focus:ring-blue-400 text-slate-700 placeholder:text-slate-300"
                                         placeholder="배너명" value={editForm.name}
                                         onChange={(e) => setEditForm(f => ({ ...f, name: e.target.value }))}
                                         onClick={(e) => e.stopPropagation()}
                                         onKeyDown={(e) => { if (e.key==='Enter') commitEdit(); if (e.key==='Escape') cancelEdit(); if (e.key==='Tab') { e.preventDefault(); deptInputRef.current?.focus(); } }} />
-                                      <button onClick={(e) => { e.stopPropagation(); commitEdit(); }} className="flex-shrink-0 bg-blue-500 hover:bg-blue-600 text-white rounded-lg p-0.5"><Check size={11} /></button>
-                                      <button onClick={(e) => { e.stopPropagation(); cancelEdit(); }} className="flex-shrink-0 bg-slate-200 hover:bg-slate-300 text-slate-600 rounded-lg p-0.5"><X size={11} /></button>
+
+                                      <div className="flex items-center gap-1 flex-shrink-0">
+                                        {['#DBEAFE','#EDE9FE','#FCE7F3','#D1FAE5','#FEF3C7','#FFE4E6'].map(c => (
+                                          <button key={c}
+                                            onMouseDown={e => e.stopPropagation()}
+                                            onClick={e => { e.stopPropagation(); updateBanners(prev => prev.map(b => b.id===banner.id?{...b,color:c}:b)); }}
+                                            className={`w-3.5 h-3.5 rounded-full border-2 transition-transform hover:scale-125 flex-shrink-0 ${banner.color===c?'border-slate-500':'border-white shadow-sm'}`}
+                                            style={{backgroundColor:c}}/>
+                                        ))}
+                                      </div>
+                                      <button onClick={(e) => { e.stopPropagation(); commitEdit(); }} className="flex-shrink-0 bg-blue-500 hover:bg-blue-600 text-white rounded-lg p-1"><Check size={10} /></button>
+                                      <button onClick={(e) => { e.stopPropagation(); cancelEdit(); }} className="flex-shrink-0 bg-slate-100 hover:bg-slate-200 text-slate-500 rounded-lg p-1"><X size={10} /></button>
                                     </div>
                                   )}
                                 </div>
@@ -731,42 +820,35 @@ const MainApp = ({ onLogout }) => {
 
         {/* 하단 리스트 */}
         <div className="bg-white rounded-2xl border border-slate-100 shadow-sm overflow-hidden">
-          <div className="px-5 py-3.5 border-b border-slate-100 flex flex-col gap-2.5">
-            <div className="flex justify-between items-center flex-wrap gap-3">
-              <h2 className="font-bold text-slate-700 flex items-center gap-2 text-sm">
-                <Layout size={15} className="text-blue-400" />
-                배너 데이터 상세 설정
-                <span className="text-blue-400 text-[11px] px-2 py-0.5 bg-blue-50 rounded-full border border-blue-100 font-bold">Total {filteredBanners.length}</span>
-              </h2>
-              <div className="flex bg-slate-50 p-1 rounded-xl border border-slate-100">
-                {['전체','진행중','대기','종료'].map(tab => (
-                  <button key={tab} onClick={() => { setActiveTab(tab); setCurrentPage(1); }}
-                    className={`px-3 py-1 rounded-lg text-xs font-bold transition-all ${activeTab === tab ? 'bg-white text-blue-500 shadow-sm' : 'text-slate-400 hover:text-slate-600'}`}>
-                    {tab}
-                  </button>
-                ))}
-              </div>
-            </div>
-            <div className="flex items-center gap-2 flex-wrap">
-              <div className="relative flex-1 min-w-[160px]">
-                <svg className="absolute left-2.5 top-1/2 -translate-y-1/2 text-slate-300" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
-                <input
-                  className="w-full pl-7 pr-3 py-1.5 text-xs rounded-xl border border-slate-100 bg-slate-50 outline-none focus:ring-1 focus:ring-blue-300 focus:bg-white transition-all placeholder:text-slate-300"
-                  placeholder="배너명, 부서, 구좌 검색..."
-                  value={searchQuery}
-                  onChange={e => { setSearchQuery(e.target.value); setCurrentPage(1); }}
-                />
-              </div>
-              <div className="flex items-center gap-1.5">
-                <span className="text-[11px] text-slate-400 font-medium">정렬</span>
-                <div className="flex bg-slate-50 border border-slate-100 rounded-xl p-0.5">
-                  {[['start','시작일'],['end','종료일'],['name','이름'],['slot','구좌'],['status','상태']].map(([val, label]) => (
-                    <button key={val} onClick={() => setSortBy(val)}
-                      className={`px-2.5 py-1 rounded-lg text-[11px] font-bold transition-all ${sortBy === val ? 'bg-white text-blue-500 shadow-sm' : 'text-slate-400 hover:text-slate-600'}`}>
-                      {label}
-                    </button>
-                  ))}
+          <div className="px-5 py-3.5 border-b border-slate-100">
+            <div className="flex justify-between items-center gap-3">
+              <div className="flex items-center gap-2">
+                <h2 className="font-bold text-slate-700 flex items-center gap-2 text-sm">
+                  <Layout size={15} className="text-blue-400"/>
+                  배너 데이터 상세 설정
+                </h2>
+                <div className="flex bg-slate-50 p-1 rounded-xl border border-slate-100">
+                  {['전체','진행중','대기','종료'].map(tab => {
+                    const count = tab === '전체' ? banners.length : banners.filter(b => getStatus(b.start, b.end) === tab).length;
+                    return (
+                      <button key={tab} onClick={() => { setActiveTab(tab); setCurrentPage(1); }}
+                        className={`px-3 py-1 rounded-lg text-xs font-bold transition-all flex items-center gap-1 ${activeTab===tab?'bg-white text-blue-500 shadow-sm':'text-slate-400 hover:text-slate-600'}`}>
+                        {tab}
+                        <span className={`text-[10px] font-bold px-1 py-0.5 rounded-full ${
+                          tab==='진행중' ? 'bg-emerald-100 text-emerald-500' :
+                          tab==='대기' ? 'bg-blue-100 text-blue-400' :
+                          tab==='종료' ? 'bg-slate-100 text-slate-400' :
+                          'bg-slate-200 text-slate-500'
+                        }`}>{count}</span>
+                      </button>
+                    );
+                  })}
                 </div>
+              </div>
+              <div className="relative">
+                <svg className="absolute left-2.5 top-1/2 -translate-y-1/2 text-slate-300" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+                <input className="pl-7 pr-3 py-1.5 text-xs rounded-xl border border-slate-100 bg-slate-50 outline-none focus:ring-1 focus:ring-blue-300 focus:bg-white transition-all placeholder:text-slate-300 w-48"
+                  placeholder="배너명, 부서, 구좌 검색..." value={searchQuery} onChange={e => { setSearchQuery(e.target.value); setCurrentPage(1); }}/>
               </div>
             </div>
           </div>
@@ -774,8 +856,28 @@ const MainApp = ({ onLogout }) => {
             <table className="w-full text-left border-collapse">
               <thead className="bg-slate-50/60 border-b border-slate-100">
                 <tr>
-                  {['상태','배너 명칭','요청 부서','색상','노출 구좌','노출 기간 (시작~종료)','메모','삭제'].map(h => (
-                    <th key={h} className="px-3 py-2.5 text-[12px] font-bold text-slate-500 text-center whitespace-nowrap">{h}</th>
+                  {[
+                    { label: '상태', key: 'status' },
+                    { label: '배너 명칭', key: 'name' },
+                    { label: '요청 부서', key: 'dept' },
+                    { label: '색상', key: null },
+                    { label: '노출 구좌', key: 'slot' },
+                    { label: '노출 기간 (시작~종료)', key: 'start' },
+                    { label: '메모', key: null },
+                    { label: '삭제', key: null },
+                  ].map(({ label, key }) => (
+                    <th key={label}
+                      onClick={() => key && setSortBy(k => k === key ? `-${key}` : k === `-${key}` ? null : key)}
+                      className={`px-3 py-2.5 text-[12px] font-bold text-slate-500 text-center whitespace-nowrap ${key ? 'cursor-pointer hover:text-blue-500 select-none' : ''}`}>
+                      <span className="inline-flex items-center justify-center gap-0.5">
+                        {label}
+                        {key && (
+                          <span className={`text-[10px] ml-0.5 ${sortBy===key||sortBy==='-'+key?'text-blue-500':'opacity-20'}`}>
+                            {sortBy === `-${key}` ? '▼' : '▲'}
+                          </span>
+                        )}
+                      </span>
+                    </th>
                   ))}
                 </tr>
               </thead>
@@ -803,7 +905,7 @@ const MainApp = ({ onLogout }) => {
                           value={banner.name}
                           onChange={(e) => updateBanners(prev => prev.map(b => b.id===banner.id ? {...b, name: e.target.value} : b))} />
                       </td>
-                      <td className="px-3 py-1">
+                      <td className="px-3 py-1 text-center">
                         <input className="bg-slate-50 hover:bg-slate-100 focus:bg-white border border-slate-100 focus:border-blue-300 rounded-lg px-2 py-1 text-xs font-semibold text-slate-600 text-center transition-all outline-none placeholder:text-slate-300 w-16"
                           value={banner.dept||''} placeholder="부서"
                           onChange={(e) => updateBanners(prev => prev.map(b => b.id===banner.id ? {...b, dept: e.target.value} : b))} />
