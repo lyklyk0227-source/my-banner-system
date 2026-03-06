@@ -7,37 +7,15 @@ import {
 
 const SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbzoHeSt4DxT1m1Oqwiromcldeso49DHDJCtH_JVzVMuKJ2b5Q1GEMig4R_vmvVL-nUMaQ/exec';
 const DEFAULT_SLOTS = ['로고 배너', '레이어', '헤더 배너', '강조형 no.1 (#1)', '강조형 no.2 (#2)', '강조형 no.1 (#3)', '강조형 no.2', '강조형 no.3', '띠 배너 (#1)', '띠 배너 (#2)', '플로팅 배너 (#1)', '플로팅 배너 (#2)', '플로팅 배너 (#3)'];
-const PASSWORD = '1004'; // ← 비밀번호 여기서 변경
+const PASSWORD = '1004';
 
-// 한국 공휴일 (매년 업데이트 필요)
 const HOLIDAYS = new Set([
-  // 2025년
-  '2025-01-01', // 신정
-  '2025-01-28', '2025-01-29', '2025-01-30', // 설날 연휴
-  '2025-03-01', // 삼일절
-  '2025-05-05', // 어린이날
-  '2025-05-06', // 어린이날 대체
-  '2025-05-15', // 부처님오신날
-  '2025-06-06', // 현충일
-  '2025-08-15', // 광복절
-  '2025-10-03', // 개천절
-  '2025-10-05', '2025-10-06', '2025-10-07', // 추석 연휴
-  '2025-10-09', // 한글날
-  '2025-12-25', // 크리스마스
-  // 2026년
-  '2026-01-01', // 신정
-  '2026-02-16', '2026-02-17', '2026-02-18', // 설날 연휴
-  '2026-03-01', // 삼일절
-  '2026-03-02', // 삼일절 대체
-  '2026-05-05', // 어린이날
-  '2026-05-24', // 부처님오신날
-  '2026-06-06', // 현충일
-  '2026-08-15', // 광복절
-  '2026-08-17', // 광복절 대체
-  '2026-09-24', '2026-09-25', '2026-09-26', // 추석 연휴
-  '2026-10-03', // 개천절
-  '2026-10-09', // 한글날
-  '2026-12-25', // 크리스마스
+  '2025-01-01','2025-01-28','2025-01-29','2025-01-30','2025-03-01','2025-05-05',
+  '2025-05-06','2025-05-15','2025-06-06','2025-08-15','2025-10-03','2025-10-05',
+  '2025-10-06','2025-10-07','2025-10-09','2025-12-25',
+  '2026-01-01','2026-02-16','2026-02-17','2026-02-18','2026-03-01','2026-03-02',
+  '2026-05-05','2026-05-24','2026-06-06','2026-08-15','2026-08-17','2026-09-24',
+  '2026-09-25','2026-09-26','2026-10-03','2026-10-09','2026-12-25',
 ]);
 
 const normalizeDateTime = (str) => {
@@ -53,13 +31,7 @@ const toDateOnly = (str) => str ? str.slice(0, 10) : '';
    색상 팔레트 팝오버
 ───────────────────────────────────────── */
 const PASTEL_COLORS = [
-  '#DBEAFE', // 파랑
-  '#EDE9FE', // 보라
-  '#FCE7F3', // 핑크
-  '#D1FAE5', // 민트
-  '#FEF3C7', // 노랑
-  '#FFE4E6', // 연분홍
-  '#E0F2FE', // 하늘
+  '#DBEAFE','#EDE9FE','#FCE7F3','#D1FAE5','#FEF3C7','#FFE4E6','#E0F2FE',
 ];
 
 const ColorPicker = ({ value, onChange }) => {
@@ -70,9 +42,7 @@ const ColorPicker = ({ value, onChange }) => {
 
   useEffect(() => {
     const handleClick = (e) => {
-      if (triggerRef.current && !triggerRef.current.contains(e.target)) {
-        setOpen(false);
-      }
+      if (triggerRef.current && !triggerRef.current.contains(e.target)) setOpen(false);
     };
     document.addEventListener('mousedown', handleClick);
     return () => document.removeEventListener('mousedown', handleClick);
@@ -82,44 +52,30 @@ const ColorPicker = ({ value, onChange }) => {
     e.stopPropagation();
     if (!open && triggerRef.current) {
       const rect = triggerRef.current.getBoundingClientRect();
-      setPos({
-        top: rect.bottom + 6,
-        left: rect.left + rect.width / 2,
-      });
+      setPos({ top: rect.bottom + 6, left: rect.left + rect.width / 2 });
     }
     setOpen(o => !o);
   };
 
   return (
     <div className="inline-block" ref={triggerRef}>
-      <button
-        onClick={handleOpen}
+      <button onClick={handleOpen}
         className="w-7 h-7 rounded-full border-2 border-white shadow-sm transition-transform hover:scale-110 block"
-        style={{ backgroundColor: value }}
-      />
+        style={{ backgroundColor: value }} />
       {open && (
-        <div
-          onMouseDown={(e) => e.stopPropagation()}
+        <div onMouseDown={(e) => e.stopPropagation()}
           className="fixed bg-white rounded-2xl shadow-xl border border-slate-100 p-2.5 flex items-center gap-1.5"
-          style={{ top: pos.top, left: pos.left, transform: 'translateX(-50%)', zIndex: 99999 }}
-        >
+          style={{ top: pos.top, left: pos.left, transform: 'translateX(-50%)', zIndex: 99999 }}>
           {PASTEL_COLORS.map(c => (
-            <button key={c}
-              onClick={(e) => { e.stopPropagation(); onChange(c); setOpen(false); }}
+            <button key={c} onClick={(e) => { e.stopPropagation(); onChange(c); setOpen(false); }}
               className={`w-6 h-6 rounded-full border-2 transition-transform hover:scale-110 flex-shrink-0 ${value === c ? 'border-slate-400 scale-110' : 'border-white shadow-sm'}`}
-              style={{ backgroundColor: c }}
-            />
+              style={{ backgroundColor: c }} />
           ))}
           <div className="w-px h-5 bg-slate-200 mx-0.5 flex-shrink-0" />
           <div className="relative flex-shrink-0" title="다른 색상 선택">
             <div className="w-6 h-6 rounded-full border-2 border-dashed border-slate-300 flex items-center justify-center cursor-pointer hover:border-slate-400 transition-colors overflow-hidden">
-              <input
-                ref={pickerRef}
-                type="color"
-                value={value}
-                onChange={(e) => onChange(e.target.value)}
-                className="absolute opacity-0 w-full h-full cursor-pointer"
-              />
+              <input ref={pickerRef} type="color" value={value} onChange={(e) => onChange(e.target.value)}
+                className="absolute opacity-0 w-full h-full cursor-pointer" />
               <span className="text-slate-400 text-[10px] font-bold pointer-events-none">+</span>
             </div>
           </div>
@@ -144,9 +100,7 @@ const LoginPage = ({ onLogin }) => {
     if (pw === PASSWORD) {
       onLogin();
     } else {
-      setError(true);
-      setShake(true);
-      setPw('');
+      setError(true); setShake(true); setPw('');
       setTimeout(() => setShake(false), 500);
       setTimeout(() => inputRef.current?.focus(), 10);
     }
@@ -156,78 +110,45 @@ const LoginPage = ({ onLogin }) => {
     <div className="min-h-screen flex flex-col items-center justify-center relative overflow-hidden"
       style={{ background: 'linear-gradient(135deg, #eff6ff 0%, #eef2ff 50%, #f0f9ff 100%)' }}>
       <style>{`
-        @keyframes shake {
-          0%,100%{transform:translateX(0)}
-          20%{transform:translateX(-8px)}
-          40%{transform:translateX(8px)}
-          60%{transform:translateX(-6px)}
-          80%{transform:translateX(6px)}
-        }
-        @keyframes float {
-          0%,100%{transform:translateY(0px)}
-          50%{transform:translateY(-8px)}
-        }
+        @keyframes shake { 0%,100%{transform:translateX(0)} 20%{transform:translateX(-8px)} 40%{transform:translateX(8px)} 60%{transform:translateX(-6px)} 80%{transform:translateX(6px)} }
+        @keyframes float { 0%,100%{transform:translateY(0px)} 50%{transform:translateY(-8px)} }
         .float { animation: float 3s ease-in-out infinite; }
       `}</style>
-
-      {/* 배경 블러 원 장식 */}
       <div className="absolute top-[-80px] left-[-80px] w-72 h-72 rounded-full opacity-20 pointer-events-none"
         style={{ background: 'radial-gradient(circle, #93c5fd, transparent)' }} />
       <div className="absolute bottom-[-60px] right-[-60px] w-64 h-64 rounded-full opacity-20 pointer-events-none"
         style={{ background: 'radial-gradient(circle, #a5b4fc, transparent)' }} />
-
-      {/* 카드 */}
       <div className={`relative bg-white/80 backdrop-blur-sm rounded-3xl shadow-2xl border border-white px-10 py-12 w-full max-w-sm`}
         style={shake ? { animation: 'shake 0.4s ease' } : {}}>
-
-        {/* 상단 아이콘 */}
         <div className="flex flex-col items-center mb-8">
           <div className="float w-16 h-16 rounded-2xl flex items-center justify-center text-3xl mb-4 shadow-lg shadow-blue-100"
-            style={{ background: 'linear-gradient(135deg, #60a5fa, #818cf8)' }}>
-            🍦
-          </div>
+            style={{ background: 'linear-gradient(135deg, #60a5fa, #818cf8)' }}>🍦</div>
           <h1 className="text-xl font-extrabold tracking-tight"
-            style={{ background: 'linear-gradient(90deg, #3b82f6, #6366f1)', WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent' }}>
-            배너 관리
-          </h1>
+            style={{ background: 'linear-gradient(90deg, #3b82f6, #6366f1)', WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent' }}>배너 관리</h1>
           <p className="text-[10px] text-slate-400 mt-1 tracking-widest uppercase font-medium">i-Scream · Banner Mgmt</p>
         </div>
-
-        {/* 입력 */}
         <div className="space-y-3">
           <div className="relative">
             <Lock size={13} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-300" />
-            <input
-              ref={inputRef}
-              type="password"
-              placeholder="비밀번호를 입력하세요"
-              value={pw}
+            <input ref={inputRef} type="password" placeholder="비밀번호를 입력하세요" value={pw}
               onChange={(e) => { setPw(e.target.value); setError(false); }}
               onKeyDown={(e) => e.key === 'Enter' && handleSubmit()}
               className={`w-full pl-9 pr-4 py-3 rounded-2xl border text-sm outline-none transition-all bg-slate-50/80
-                ${error ? 'border-red-300 bg-red-50 focus:ring-2 focus:ring-red-200' : 'border-slate-200 focus:border-blue-400 focus:ring-2 focus:ring-blue-100'}`}
-            />
+                ${error ? 'border-red-300 bg-red-50 focus:ring-2 focus:ring-red-200' : 'border-slate-200 focus:border-blue-400 focus:ring-2 focus:ring-blue-100'}`} />
           </div>
           {error && <p className="text-xs text-red-400 text-center font-medium">비밀번호가 올바르지 않아요</p>}
           <button onClick={handleSubmit}
             className="w-full text-white py-3 rounded-2xl text-sm font-bold transition-all active:scale-95 shadow-md shadow-blue-200"
-            style={{ background: 'linear-gradient(90deg, #3b82f6, #6366f1)' }}>
-            로그인
-          </button>
+            style={{ background: 'linear-gradient(90deg, #3b82f6, #6366f1)' }}>로그인</button>
         </div>
-
-        {/* 가이드 링크 */}
         <div className="mt-6 pt-5 border-t border-slate-100 text-center">
           <a href="https://concise-quarter-a1a.notion.site/17641177fa2a802f8c71f459bc6fa5d4"
             target="_blank" rel="noopener noreferrer"
             className="inline-flex items-center gap-1.5 text-xs text-slate-400 hover:text-indigo-500 transition-colors font-medium">
-            <BookOpen size={12} />
-            배너 제작 가이드 보기
+            <BookOpen size={12} />배너 제작 가이드 보기
           </a>
         </div>
       </div>
-
-      {/* 하단 크레딧 */}
       <p className="absolute bottom-6 text-[11px] text-slate-400 font-medium tracking-wide">by.lyk</p>
     </div>
   );
@@ -243,8 +164,7 @@ const MainApp = ({ onLogout }) => {
   const [currentPage, setCurrentPage] = useState(1);
   const PAGE_SIZE = 10;
   const [loading, setLoading] = useState(true);
-  const [saving, setSaving] = useState(false);
-  const [saveStatus, setSaveStatus] = useState('idle'); // idle | saving | saved | error
+  const [saveStatus, setSaveStatus] = useState('idle');
 
   const [allSlots, setAllSlots] = useState(DEFAULT_SLOTS);
   const [banners, setBanners] = useState([]);
@@ -255,6 +175,7 @@ const MainApp = ({ onLogout }) => {
   const isFirstLoad = useRef(true);
   const bannersRef = useRef([]);
 
+  // ✅ FIX 1: updateBanners가 bannersRef를 항상 최신으로 유지
   const updateBanners = (fn) => {
     setBanners(prev => {
       const next = typeof fn === 'function' ? fn(prev) : fn;
@@ -268,21 +189,17 @@ const MainApp = ({ onLogout }) => {
     const interval = setInterval(() => {
       if (isFirstLoad.current || bannersRef.current.length === 0) return;
       setSaveStatus('saving');
-      setSaving(true);
       fetch(SCRIPT_URL, { method: 'POST', body: JSON.stringify({ action: 'save', data: bannersRef.current }) })
         .then(() => { setSaveStatus('saved'); setTimeout(() => setSaveStatus('idle'), 2000); })
-        .catch(() => { setSaveStatus('error'); })
-        .finally(() => setSaving(false));
+        .catch(() => setSaveStatus('error'))
     }, 30000);
     return () => clearInterval(interval);
   }, []);
 
-  // 창 닫거나 이탈 시 즉시 저장
   useEffect(() => {
     const handleUnload = () => {
       if (isFirstLoad.current || bannersRef.current.length === 0) return;
       const payload = JSON.stringify({ action: 'save', data: bannersRef.current });
-      // sendBeacon: 페이지 언로드 중에도 안정적으로 전송
       navigator.sendBeacon(SCRIPT_URL, new Blob([payload], { type: 'application/json' }));
     };
     window.addEventListener('beforeunload', handleUnload);
@@ -298,7 +215,9 @@ const MainApp = ({ onLogout }) => {
   useEffect(() => {
     fetch(SCRIPT_URL).then(r => r.json()).then(data => {
       if (data && data.length > 0) {
-        setBanners(data.map(b => ({ ...b, id: String(b.id), start: normalizeDateTime(b.start), end: normalizeDateTime(b.end) })));
+        const loaded = data.map(b => ({ ...b, id: String(b.id), start: normalizeDateTime(b.start), end: normalizeDateTime(b.end) }));
+        setBanners(loaded);
+        bannersRef.current = loaded;
       }
       setLoading(false);
       setTimeout(() => { isFirstLoad.current = false; }, 100);
@@ -352,7 +271,8 @@ const MainApp = ({ onLogout }) => {
     return range;
   }, [currentDate]);
 
-  const viewStart = dateRange[0], viewEnd = dateRange[dateRange.length-1];
+  const viewStart = dateRange[0];
+  const viewEnd = dateRange[dateRange.length - 1];
   const isToday = (date) => { const n = new Date(); return date.getFullYear()===n.getFullYear()&&date.getMonth()===n.getMonth()&&date.getDate()===n.getDate(); };
   const displaySlots = showOnlyVisible ? allSlots.filter(s => visibleSlots[s]) : allSlots;
   const filteredBanners = banners.filter(b => activeTab === '전체' || getStatus(b.start, b.end) === activeTab);
@@ -385,7 +305,9 @@ const MainApp = ({ onLogout }) => {
         }
         setDropTargetSlot(newSlot);
       }
-      setBanners(prev => prev.map(b => {
+
+      // ✅ FIX 1: 드래그 중에도 bannersRef 동기화 (updateBanners 사용)
+      updateBanners(prev => prev.map(b => {
         if (b.id !== dragging.id) return b;
         let ns = dragging.initialStart, ne = dragging.initialEnd;
         if (dragging.type === 'move') { ns = shiftDateTime(ns, days); ne = shiftDateTime(ne, days); }
@@ -394,9 +316,7 @@ const MainApp = ({ onLogout }) => {
         return { ...b, start: ns, end: ne, slot: newSlot };
       }));
     };
-    const onUp = () => {
-      setDragging(null); setDropTargetSlot(null);
-    };
+    const onUp = () => { setDragging(null); setDropTargetSlot(null); };
     if (dragging) { window.addEventListener('mousemove', onMove); window.addEventListener('mouseup', onUp); }
     return () => { window.removeEventListener('mousemove', onMove); window.removeEventListener('mouseup', onUp); };
   }, [dragging]);
@@ -430,14 +350,10 @@ const MainApp = ({ onLogout }) => {
       <div className="flex items-center justify-between px-6 py-3 bg-white border-b border-slate-100 z-50">
         <div className="flex items-center gap-5">
           <div className="flex items-center gap-2.5">
-            <div className="w-8 h-8 rounded-xl bg-gradient-to-br from-blue-400 to-indigo-500 flex items-center justify-center shadow-sm shadow-blue-200 text-base">
-              🍦
-            </div>
+            <div className="w-8 h-8 rounded-xl bg-gradient-to-br from-blue-400 to-indigo-500 flex items-center justify-center shadow-sm shadow-blue-200 text-base">🍦</div>
             <div>
               <h1 className="text-sm font-extrabold leading-tight tracking-tight"
-                style={{ background: 'linear-gradient(90deg, #3b82f6, #6366f1)', WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent' }}>
-                배너 관리
-              </h1>
+                style={{ background: 'linear-gradient(90deg, #3b82f6, #6366f1)', WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent' }}>배너 관리</h1>
               <p className="text-[9px] text-slate-400 leading-tight tracking-widest uppercase font-medium">i-Scream · Banner Mgmt</p>
             </div>
           </div>
@@ -451,28 +367,38 @@ const MainApp = ({ onLogout }) => {
             <ChevronRight size={14} className="cursor-pointer text-slate-400 hover:text-blue-500 transition-colors"
               onClick={() => { const d = new Date(currentDate); d.setMonth(d.getMonth()+1); setCurrentDate(d); }} />
           </div>
+          {/* 사용법 안내 */}
+          <div className="flex items-center gap-2.5 px-3.5 py-1.5 bg-slate-50 rounded-xl border border-slate-100">
+            <span className="flex items-center gap-1.5 text-[11px] text-slate-400 font-medium">
+              <span className="text-slate-300 text-sm">⠿</span> 드래그로 이동
+            </span>
+            <span className="w-px h-3 bg-slate-200 flex-shrink-0" />
+            <span className="flex items-center gap-1.5 text-[11px] text-slate-400 font-medium">
+              <span className="text-slate-300 text-sm">↔</span> 양 끝으로 기간 조절
+            </span>
+            <span className="w-px h-3 bg-slate-200 flex-shrink-0" />
+            <span className="flex items-center gap-1.5 text-[11px] text-slate-400 font-medium">
+              <Pencil size={10} className="text-slate-300" /> 이름 · 부서 편집
+            </span>
+          </div>
         </div>
 
         <div className="flex items-center gap-3">
-          {/* 자동저장 상태 */}
           <div className="flex items-center gap-1.5 text-xs">
             {saveStatus === 'saving' && <><Loader size={11} className="text-blue-400 animate-spin" /><span className="text-slate-400">저장 중...</span></>}
             {saveStatus === 'saved' && <><span className="w-1.5 h-1.5 rounded-full bg-emerald-400 inline-block" /><span className="text-emerald-500 font-medium">저장됨</span></>}
             {saveStatus === 'error' && <><span className="w-1.5 h-1.5 rounded-full bg-red-400 inline-block" /><span className="text-red-400 font-medium">저장 실패</span></>}
           </div>
-
           <label className="flex items-center gap-1.5 text-xs text-slate-500 cursor-pointer font-medium">
             <input type="checkbox" checked={showOnlyVisible} onChange={(e) => setShowOnlyVisible(e.target.checked)} className="w-3.5 h-3.5 rounded cursor-pointer" />
             활성 구좌만 보기
           </label>
-
           <button onClick={() => {
             const id = Date.now().toString();
             updateBanners(prev => [...prev, { id, name: '새 배너', slot: allSlots[0], start: makeDefaultDatetime(0), end: makeDefaultDatetime(4, true), dept: '', color: '#DBEAFE', memo: '' }]);
           }} className="flex items-center gap-1.5 bg-blue-500 hover:bg-blue-600 text-white px-4 py-1.5 rounded-full text-xs font-bold shadow-sm transition-all active:scale-95">
             <Plus size={13} /> 배너 추가
           </button>
-
         </div>
       </div>
 
@@ -494,12 +420,12 @@ const MainApp = ({ onLogout }) => {
                     const isRed = isSun || isHoliday;
                     return (
                       <th key={idx} className={`w-[40px] border-r border-slate-100 p-1 text-center ${today ? 'bg-blue-50' : isRed && !today ? 'bg-red-50/40' : ''}`}>
-                        <div className={`text-[9px] font-semibold mb-0.5 ${isRed ? 'text-red-400' : isSat ? 'text-blue-400' : 'text-slate-300'}`}>
+                        <div className={`text-[11px] font-bold mb-0.5 ${isRed ? 'text-red-400' : isSat ? 'text-blue-400' : 'text-slate-500'}`}>
                           {['일','월','화','수','목','금','토'][date.getDay()]}
                         </div>
                         {today
-                          ? <div className="bg-blue-500 text-white text-[10px] font-bold rounded-full w-5 h-5 flex items-center justify-center mx-auto">{date.getDate()}</div>
-                          : <div className={`text-[11px] font-semibold ${isRed ? 'text-red-400' : isSat ? 'text-blue-400' : 'text-slate-400'}`}>{date.getDate()}</div>
+                          ? <div className="bg-blue-500 text-white text-[11px] font-bold rounded-full w-5 h-5 flex items-center justify-center mx-auto">{date.getDate()}</div>
+                          : <div className={`text-[12px] font-semibold ${isRed ? 'text-red-400' : isSat ? 'text-blue-400' : 'text-slate-500'}`}>{date.getDate()}</div>
                         }
                       </th>
                     );
@@ -532,17 +458,28 @@ const MainApp = ({ onLogout }) => {
                           {visibleSlots[slot] && banners
                             .filter(b => {
                               const bDateOnly = toDateOnly(b.start), bEndOnly = toDateOnly(b.end);
-                              if (new Date(bDateOnly) < new Date(formatDateOnly(viewStart))) {
-                                return b.slot === slot && idx === 0 && bEndOnly >= formatDateOnly(viewStart);
+                              const viewStartStr = formatDateOnly(viewStart);
+                              // ✅ FIX 2: 뷰 범위 밖에서 시작하는 배너도 idx===0에서 렌더 (클램핑 없이 실제 기간 사용)
+                              if (new Date(bDateOnly) < new Date(viewStartStr)) {
+                                return b.slot === slot && idx === 0 && bEndOnly >= viewStartStr;
                               }
                               return b.slot === slot && bDateOnly === dateStr;
                             })
                             .map(banner => {
-                              const bStartOnly = toDateOnly(banner.start), bEndOnly = toDateOnly(banner.end);
-                              const viewStartStr = formatDateOnly(viewStart), viewEndStr = formatDateOnly(viewEnd);
+                              const bStartOnly = toDateOnly(banner.start);
+                              const bEndOnly = toDateOnly(banner.end);
+                              const viewStartStr = formatDateOnly(viewStart);
+
+                              // ✅ FIX 2: dispStart는 뷰 클램핑용, 너비는 실제 남은 날짜 기준으로 계산
                               const dispStart = bStartOnly < viewStartStr ? viewStartStr : bStartOnly;
-                              const dispEnd = bEndOnly > viewEndStr ? viewEndStr : bEndOnly;
-                              const duration = Math.round((new Date(dispEnd) - new Date(dispStart)) / 86400000) + 1;
+
+                              // 뷰 끝에서 클램핑하지 않고 실제 종료일까지 너비 계산
+                              const durationDays = Math.round((new Date(bEndOnly) - new Date(dispStart)) / 86400000) + 1;
+                              // 뷰 내 남은 칸 수 (최소 1)
+                              const remainingCols = dateRange.length - idx;
+                              // 실제 길이와 남은 칸 중 더 큰 값 사용 (뷰 밖으로 뻗어나가도록)
+                              const duration = Math.max(1, durationDays);
+
                               const hasCollision = collisionInfo[banner.id];
                               const isDraggingThis = dragging?.id === banner.id;
                               const isEditingThis = editingId === banner.id;
@@ -580,7 +517,6 @@ const MainApp = ({ onLogout }) => {
                                         {banner.dept && <span className="text-[9px] px-1.5 py-0.5 bg-black/10 rounded-full font-bold text-slate-600 whitespace-nowrap flex-shrink-0">{banner.dept}</span>}
                                         <span className="text-[11px] font-semibold text-slate-700 truncate">{banner.name}</span>
                                       </div>
-                                      {/* 메모 점 - 연필 왼쪽에 나란히 */}
                                       {banner.memo && (
                                         <div className="flex-shrink-0 pointer-events-none">
                                           <div className="w-1.5 h-1.5 rounded-full bg-orange-400 shadow-sm" />
@@ -651,7 +587,8 @@ const MainApp = ({ onLogout }) => {
             <table className="w-full text-left border-collapse">
               <thead className="bg-slate-50/60 border-b border-slate-100">
                 <tr>
-                  {['상태','배너 명칭','요청 부서','색상','노출 구좌','노출 기간 (날짜 · 시간)','메모','삭제'].map(h => (
+                  {/* ✅ FIX 3: 시간 컬럼 제거 → "노출 기간 (날짜)" */}
+                  {['상태','배너 명칭','요청 부서','색상','노출 구좌','노출 기간 (날짜)','메모','삭제'].map(h => (
                     <th key={h} className="px-3 py-2.5 text-[10px] font-bold text-slate-400 uppercase tracking-wider text-center whitespace-nowrap">{h}</th>
                   ))}
                 </tr>
@@ -662,8 +599,8 @@ const MainApp = ({ onLogout }) => {
                   const hasCollision = collisionInfo[banner.id];
                   const isBeingEdited = editingId === banner.id;
                   return (
-                    <tr key={banner.id} className={`transition-colors ${hasCollision ? 'bg-red-50/40' : ''} ${isBeingEdited ? 'bg-blue-50/30' : 'hover:bg-slate-50/50'}`}>
-                      <td className="px-3 py-3 text-center">
+                    <tr key={banner.id} className={`transition-colors text-xs ${hasCollision ? 'bg-red-50/40' : ''} ${isBeingEdited ? 'bg-blue-50/30' : 'hover:bg-slate-50/50'}`}>
+                      <td className="px-3 py-1 text-center">
                         <div className="flex flex-col items-center gap-1">
                           <span className={`px-2 py-0.5 rounded-full text-[11px] font-bold whitespace-nowrap
                             ${status==='진행중' ? 'bg-emerald-50 text-emerald-500' : status==='대기' ? 'bg-blue-50 text-blue-500' : 'bg-slate-100 text-slate-400'}`}>
@@ -672,55 +609,51 @@ const MainApp = ({ onLogout }) => {
                           {hasCollision && <span className="text-[9px] font-bold text-red-400 flex items-center gap-0.5 whitespace-nowrap"><AlertCircle size={9} /> 일정 중첩</span>}
                         </div>
                       </td>
-                      <td className="px-3 py-3">
+                      <td className="px-3 py-1">
                         <input className="bg-transparent border-b border-transparent focus:border-blue-400 outline-none font-semibold text-sm text-slate-700 w-full transition-all py-0.5 min-w-[120px]"
                           value={banner.name}
                           onChange={(e) => updateBanners(prev => prev.map(b => b.id===banner.id ? {...b, name: e.target.value} : b))} />
                       </td>
-                      <td className="px-3 py-3">
-                        <input className="bg-slate-50 hover:bg-slate-100 focus:bg-white border border-slate-100 focus:border-blue-300 rounded-lg px-2 py-1 text-xs font-semibold text-slate-600 w-full text-center transition-all outline-none placeholder:text-slate-300"
+                      <td className="px-3 py-1">
+                        <input className="bg-slate-50 hover:bg-slate-100 focus:bg-white border border-slate-100 focus:border-blue-300 rounded-lg px-2 py-1 text-xs font-semibold text-slate-600 text-center transition-all outline-none placeholder:text-slate-300 w-16"
                           value={banner.dept||''} placeholder="부서"
                           onChange={(e) => updateBanners(prev => prev.map(b => b.id===banner.id ? {...b, dept: e.target.value} : b))} />
                       </td>
-                      <td className="px-3 py-3 text-center">
+                      <td className="px-3 py-1 text-center">
                         <ColorPicker
                           value={banner.color || '#DBEAFE'}
                           onChange={(c) => updateBanners(prev => prev.map(b => b.id===banner.id ? {...b, color: c} : b))}
                         />
                       </td>
-                      <td className="px-3 py-3">
+                      <td className="px-3 py-1">
                         <select className="bg-white border border-slate-100 rounded-lg px-2 py-1 text-xs outline-none font-medium cursor-pointer focus:ring-1 focus:ring-blue-400 w-full"
                           value={banner.slot}
                           onChange={(e) => updateBanners(prev => prev.map(b => b.id===banner.id ? {...b, slot: e.target.value} : b))}>
                           {allSlots.map(s => <option key={s} value={s}>{s}</option>)}
                         </select>
                       </td>
-                      {/* 노출 기간 - 시간 잘림 수정: flex-nowrap + 충분한 너비 확보 */}
-                      <td className="px-3 py-3 whitespace-nowrap">
-                        <div className="flex items-center gap-1 flex-nowrap">
+                      {/* ✅ FIX 3: 날짜만 (시간 input 제거) */}
+                      <td className="px-3 py-1 whitespace-nowrap text-center">
+                        <div className="flex items-center justify-center gap-1.5 flex-nowrap">
                           <span className="text-[10px] font-bold text-slate-300 flex-shrink-0">시작</span>
-                          <input type="date" className="border border-slate-100 rounded-lg px-1.5 py-1 text-xs focus:ring-1 focus:ring-blue-400 outline-none flex-shrink-0"
+                          <input type="date"
+                            className="border border-slate-100 rounded-lg px-1.5 py-1 text-xs focus:ring-1 focus:ring-blue-400 outline-none flex-shrink-0"
                             value={toDateOnly(banner.start)}
-                            onChange={(e) => { const t=banner.start?.slice(11,16)||'00:00'; updateBanners(prev => prev.map(b => b.id===banner.id ? {...b, start:`${e.target.value}T${t}`} : b)); }} />
-                          <input type="time" className="border border-slate-100 rounded-lg px-1.5 py-1 text-xs focus:ring-1 focus:ring-blue-400 outline-none flex-shrink-0 w-[90px]"
-                            value={banner.start?.slice(11,16)||'00:00'}
-                            onChange={(e) => { const d=toDateOnly(banner.start); updateBanners(prev => prev.map(b => b.id===banner.id ? {...b, start:`${d}T${e.target.value}`} : b)); }} />
+                            onChange={(e) => updateBanners(prev => prev.map(b => b.id===banner.id ? {...b, start:`${e.target.value}T00:00`} : b))} />
                           <span className="text-slate-300 font-bold flex-shrink-0 px-0.5">~</span>
                           <span className="text-[10px] font-bold text-slate-300 flex-shrink-0">종료</span>
-                          <input type="date" className="border border-slate-100 rounded-lg px-1.5 py-1 text-xs focus:ring-1 focus:ring-blue-400 outline-none flex-shrink-0"
+                          <input type="date"
+                            className="border border-slate-100 rounded-lg px-1.5 py-1 text-xs focus:ring-1 focus:ring-blue-400 outline-none flex-shrink-0"
                             value={toDateOnly(banner.end)}
-                            onChange={(e) => { const t=banner.end?.slice(11,16)||'23:59'; updateBanners(prev => prev.map(b => b.id===banner.id ? {...b, end:`${e.target.value}T${t}`} : b)); }} />
-                          <input type="time" className="border border-slate-100 rounded-lg px-1.5 py-1 text-xs focus:ring-1 focus:ring-blue-400 outline-none flex-shrink-0 w-[90px]"
-                            value={banner.end?.slice(11,16)||'23:59'}
-                            onChange={(e) => { const d=toDateOnly(banner.end); updateBanners(prev => prev.map(b => b.id===banner.id ? {...b, end:`${d}T${e.target.value}`} : b)); }} />
+                            onChange={(e) => updateBanners(prev => prev.map(b => b.id===banner.id ? {...b, end:`${e.target.value}T23:59`} : b))} />
                         </div>
                       </td>
-                      <td className="px-3 py-3">
+                      <td className="px-3 py-1">
                         <input className="bg-slate-50 hover:bg-slate-100 focus:bg-white border border-slate-100 focus:border-blue-300 rounded-lg px-2 py-1 text-xs text-slate-600 w-full transition-all outline-none placeholder:text-slate-300 min-w-[100px]"
                           value={banner.memo||''} placeholder="메모 입력..."
                           onChange={(e) => updateBanners(prev => prev.map(b => b.id===banner.id ? {...b, memo: e.target.value} : b))} />
                       </td>
-                      <td className="px-3 py-3 text-center">
+                      <td className="px-3 py-1 text-center">
                         <button onClick={() => updateBanners(prev => prev.filter(b => b.id !== banner.id))}
                           className="text-slate-200 hover:text-red-400 transition-colors p-1.5 hover:bg-red-50 rounded-lg">
                           <Trash2 size={14} />
