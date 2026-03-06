@@ -338,9 +338,12 @@ const MainApp = ({ onLogout }) => {
     };
   }, [loading]);
 
-  // ✅ 캐시 방지: ?t=${Date.now()} 추가
+  // ✅ 캐시 방지: GET 대신 POST로 데이터 로드
   useEffect(() => {
-    fetch(`${SCRIPT_URL}?t=${Date.now()}`).then(r => r.json()).then(data => {
+    fetch(SCRIPT_URL, {
+      method: 'POST',
+      body: JSON.stringify({ action: 'load' })
+    }).then(r => r.json()).then(data => {
       if (data && data.length > 0) {
         const loaded = data.map(b => ({ ...b, id: String(b.id), start: normalizeDateTime(b.start), end: normalizeDateTime(b.end) }));
         setBanners(loaded);
