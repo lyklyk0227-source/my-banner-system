@@ -342,6 +342,7 @@ const MainApp = ({ onLogout }) => {
   useEffect(() => {
     fetch(SCRIPT_URL, {
       method: 'POST',
+      redirect: 'follow',
       body: JSON.stringify({ action: 'load' })
     }).then(r => r.json()).then(data => {
       if (data && data.length > 0) {
