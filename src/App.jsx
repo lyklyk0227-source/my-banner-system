@@ -333,8 +333,8 @@ const MainApp = ({ onLogout }) => {
   const nameInputRef = useRef(null);
   const deptInputRef = useRef(null);
   const slotRefs = useRef({});
-  const cellWidthRef = useRef(40); // 실제 셀 너비 (동적 업데이트)
-  const firstCellRef = useRef(null);
+  const cellWidthRef = useRef(40); // 드래그 계산용 (ref)
+  const [cellWidth, setCellWidth] = useState(40); // 렌더링용 (state)
 
   useEffect(() => {
     fetch(SCRIPT_URL).then(r => r.json()).then(data => {
@@ -642,7 +642,7 @@ const MainApp = ({ onLogout }) => {
                       const cellIsHoliday = HOLIDAYS.has(dateStr);
                       const cellIsRed = date.getDay() === 0 || cellIsHoliday;
                       return (
-                        <td key={idx} ref={idx === 0 ? (el) => { if (el) cellWidthRef.current = el.getBoundingClientRect().width; } : null} style={{borderRight:'1px dashed #e2e8f0'}} className={`relative ${isToday(date) ? 'bg-blue-50/30' : cellIsRed ? 'bg-red-50/30' : ''}`}>
+                        <td key={idx} ref={idx === 0 ? (el) => { if (el) { const w = el.getBoundingClientRect().width; if (w > 0 && w !== cellWidthRef.current) { cellWidthRef.current = w; setCellWidth(w); } } } : null} style={{borderRight:'1px dashed #e2e8f0'}} className={`relative ${isToday(date) ? 'bg-blue-50/30' : cellIsRed ? 'bg-red-50/30' : ''}`}>
                           {isToday(date) && <div className="absolute inset-y-0 left-1/2 w-0.5 bg-blue-400/70 z-0 pointer-events-none" />}
                           {visibleSlots[slot] && banners
                             .filter(b => {
@@ -675,7 +675,7 @@ const MainApp = ({ onLogout }) => {
                                 <div key={banner.id}
                                   onMouseDown={(e) => !isEditingThis && handleMouseDown(e, banner, 'move')}
                                   style={{
-                                    width: `calc(${duration * cellWidthRef.current}px - 4px)`,
+                                    width: `calc(${duration * cellWidth}px - 4px)`,
                                     backgroundColor: banner.color || '#DBEAFE',
                                     top: '4px', left: '2px', height: '24px',
                                     zIndex: isDraggingThis ? 1000 : isEditingThis ? 200 : 20,
