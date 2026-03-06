@@ -265,6 +265,29 @@ const MainApp = ({ onLogout }) => {
 
   const isFirstLoad = useRef(true);
   const bannersRef = useRef([]);
+  const [showBackup, setShowBackup] = useState(false);
+  const [backupList, setBackupList] = useState([]);
+
+  const BACKUP_KEY = 'banner_backups';
+  const MAX_BACKUPS = 30;
+
+  const saveLocalBackup = (data) => {
+    try {
+      const existing = JSON.parse(localStorage.getItem(BACKUP_KEY) || '[]');
+      const today = new Date().toISOString().slice(0, 10);
+      // 오늘 날짜 백업이 이미 있으면 덮어쓰기, 없으면 추가
+      const filtered = existing.filter(b => b.date !== today);
+      const updated = [{ date: today, time: new Date().toLocaleTimeString('ko-KR', {hour:'2-digit', minute:'2-digit'}), data }, ...filtered]
+        .slice(0, MAX_BACKUPS);
+      localStorage.setItem(BACKUP_KEY, JSON.stringify(updated));
+    } catch(e) {}
+  };
+
+  const loadBackupList = () => {
+    try {
+      return JSON.parse(localStorage.getItem(BACKUP_KEY) || '[]');
+    } catch(e) { return []; }
+  };
 
   // ✅ FIX 1: updateBanners가 bannersRef를 항상 최신으로 유지
   const updateBanners = (fn) => {
@@ -281,7 +304,7 @@ const MainApp = ({ onLogout }) => {
       if (isFirstLoad.current || bannersRef.current.length === 0) return;
       setSaveStatus('saving');
       fetch(SCRIPT_URL, { method: 'POST', body: JSON.stringify({ action: 'save', data: bannersRef.current }) })
-        .then(() => { setSaveStatus('saved'); setTimeout(() => setSaveStatus('idle'), 2000); })
+        .then(() => { setSaveStatus('saved'); saveLocalBackup(bannersRef.current); setTimeout(() => setSaveStatus('idle'), 2000); })
         .catch(() => setSaveStatus('error'))
     }, 30000);
     return () => clearInterval(interval);
@@ -491,15 +514,64 @@ const MainApp = ({ onLogout }) => {
               if (isFirstLoad.current || bannersRef.current.length === 0) return;
               setSaveStatus('saving');
               fetch(SCRIPT_URL, { method: 'POST', body: JSON.stringify({ action: 'save', data: bannersRef.current }) })
-                .then(() => { setSaveStatus('saved'); setTimeout(() => setSaveStatus('idle'), 2000); })
+                .then(() => { setSaveStatus('saved'); saveLocalBackup(bannersRef.current); setTimeout(() => setSaveStatus('idle'), 2000); })
                 .catch(() => setSaveStatus('error'));
             }}
             className="flex items-center gap-1.5 bg-indigo-400 hover:bg-indigo-500 text-white px-4 py-1.5 rounded-full text-xs font-bold shadow-sm shadow-indigo-200 transition-all active:scale-95">
             <svg xmlns="http://www.w3.org/2000/svg" width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/><polyline points="17 21 17 13 7 13 7 21"/><polyline points="7 3 7 8 15 8"/></svg>
             저장
           </button>
+          <button
+            onClick={() => { setBackupList(loadBackupList()); setShowBackup(true); }}
+            className="flex items-center gap-1.5 bg-white hover:bg-slate-50 border border-slate-200 text-slate-500 hover:text-slate-700 px-3 py-1.5 rounded-full text-xs font-semibold transition-all active:scale-95"
+            title="백업 복원">
+            <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><polyline points="1 4 1 10 7 10"/><path d="M3.51 15a9 9 0 1 0 .49-3.5"/></svg>
+            백업
+          </button>
         </div>
       </div>
+
+      {/* 백업 복원 모달 */}
+      {showBackup && (
+        <div className="fixed inset-0 bg-black/30 backdrop-blur-sm z-[99999] flex items-center justify-center"
+          onClick={() => setShowBackup(false)}>
+          <div className="bg-white rounded-3xl shadow-2xl w-full max-w-sm mx-4 overflow-hidden"
+            onClick={e => e.stopPropagation()}>
+            <div className="px-5 py-4 border-b border-slate-100 flex items-center justify-between">
+              <div>
+                <h3 className="font-bold text-slate-700 text-sm">백업 복원</h3>
+                <p className="text-[11px] text-slate-400 mt-0.5">날짜를 선택해 데이터를 복원해요 (최근 30일)</p>
+              </div>
+              <button onClick={() => setShowBackup(false)}
+                className="w-7 h-7 flex items-center justify-center rounded-xl hover:bg-slate-100 text-slate-400 transition-colors">
+                <X size={14} />
+              </button>
+            </div>
+            <div className="max-h-72 overflow-y-auto divide-y divide-slate-50">
+              {backupList.length === 0 ? (
+                <div className="py-10 text-center text-slate-300 text-sm">저장된 백업이 없어요</div>
+              ) : backupList.map((b, i) => (
+                <div key={i} className="flex items-center justify-between px-5 py-3 hover:bg-slate-50 transition-colors">
+                  <div>
+                    <p className="text-xs font-bold text-slate-600">{b.date}</p>
+                    <p className="text-[11px] text-slate-400">{b.time} 저장 · {b.data.length}개 배너</p>
+                  </div>
+                  <button
+                    onClick={() => {
+                      if (!window.confirm(`${b.date} 백업으로 복원할까요?
+현재 데이터는 사라져요.`)) return;
+                      updateBanners(b.data);
+                      setShowBackup(false);
+                    }}
+                    className="px-3 py-1.5 bg-blue-500 hover:bg-blue-600 text-white text-xs font-bold rounded-xl transition-colors">
+                    복원
+                  </button>
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+      )}
 
       <div className="flex-1 overflow-auto p-5 space-y-5">
 
@@ -587,9 +659,9 @@ const MainApp = ({ onLogout }) => {
                                 <div key={banner.id}
                                   onMouseDown={(e) => !isEditingThis && handleMouseDown(e, banner, 'move')}
                                   style={{
-                                    width: `calc(${duration * 40}px - 6px)`,
+                                    width: `calc(${duration * 40}px - 4px)`,
                                     backgroundColor: banner.color || '#DBEAFE',
-                                    top: '5px', left: '3px', height: '22px',
+                                    top: '4px', left: '2px', height: '24px',
                                     zIndex: isDraggingThis ? 1000 : isEditingThis ? 200 : 20,
                                     opacity: isDraggingThis ? 0.85 : 1,
                                     transform: isDraggingThis ? 'scale(1.02) translateY(-1px)' : 'none',
