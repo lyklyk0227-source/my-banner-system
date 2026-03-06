@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef, useMemo } from 'react';
-import { 
+import {
   Calendar, Plus, Trash2, Eye, EyeOff,
   ChevronLeft, ChevronRight, Layout,
   AlertCircle, Save, Pencil, Check, X
@@ -8,45 +8,28 @@ import {
 const SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbzoHeSt4DxT1m1Oqwiromcldeso49DHDJCtH_JVzVMuKJ2b5Q1GEMig4R_vmvVL-nUMaQ/exec';
 const DEFAULT_SLOTS = ['로고 배너', '레이어', '헤더배너', '강조 no.1 (#1)', '강조 no.1 (#2)', '강조 no.1 (#3)', '강조 no.3 (랜덤)'];
 
-// "2026-03-09T08:00:00.000Z" 또는 "2026-03-09" → "2026-03-09T08:00" 형식으로 정규화
 const normalizeDateTime = (str) => {
   if (!str) return '';
-  // 이미 datetime-local 형식이면 그대로
   if (/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}$/.test(str)) return str;
-  // ISO 전체 문자열이면 UTC→로컬 변환 없이 앞 16자리만 사용
   if (str.length >= 16) return str.slice(0, 16);
-  // 날짜만 있으면 00:00 붙이기
   if (/^\d{4}-\d{2}-\d{2}$/.test(str)) return `${str}T00:00`;
   return str;
 };
 
-// 날짜만 추출 (간트차트용)
-const toDateOnly = (str) => {
-  if (!str) return '';
-  return str.slice(0, 10);
-};
+const toDateOnly = (str) => (!str ? '' : str.slice(0, 10));
 
-// 표시용 포맷 "2026-03-09T08:00" → "03-09 08:00"
-const formatDisplay = (str) => {
-  if (!str) return '';
-  const dt = normalizeDateTime(str);
-  return dt.length >= 16 ? dt.slice(5, 16).replace('T', ' ') : dt.slice(5, 10);
-};
-
-const App = () => {
-  const [currentDate, setCurrentDate] = useState(new Date(2026, 2, 5));
+export default function App() {
+  const [currentDate, setCurrentDate] = useState(new Date());
   const [showOnlyVisible, setShowOnlyVisible] = useState(false);
   const [activeTab, setActiveTab] = useState('전체');
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [hasUnsaved, setHasUnsaved] = useState(false);
-
   const [allSlots, setAllSlots] = useState(DEFAULT_SLOTS);
   const [banners, setBanners] = useState([]);
   const [visibleSlots, setVisibleSlots] = useState(
-    DEFAULT_SLOTS.reduce((acc, slot) => ({ ...acc, [slot]: true }), {})
+    DEFAULT_SLOTS.reduce((acc, s) => ({ ...acc, [s]: true }), {})
   );
-
   const isFirstLoad = useRef(true);
 
   useEffect(() => {
@@ -54,15 +37,13 @@ const App = () => {
     setHasUnsaved(true);
   }, [banners]);
 
-  // 미저장 상태에서 페이지 이탈 시 경고
   useEffect(() => {
-    const handleBeforeUnload = (e) => {
+    const fn = (e) => {
       if (!hasUnsaved) return;
-      e.preventDefault();
-      e.returnValue = '저장하지 않은 변경사항이 있어요!';
+      e.preventDefault(); e.returnValue = '';
     };
-    window.addEventListener('beforeunload', handleBeforeUnload);
-    return () => window.removeEventListener('beforeunload', handleBeforeUnload);
+    window.addEventListener('beforeunload', fn);
+    return () => window.removeEventListener('beforeunload', fn);
   }, [hasUnsaved]);
 
   // 인라인 편집
@@ -74,7 +55,7 @@ const App = () => {
 
   useEffect(() => {
     fetch(SCRIPT_URL)
-      .then(res => res.json())
+      .then(r => r.json())
       .then(data => {
         if (data && data.length > 0) {
           setBanners(data.map(b => ({
@@ -82,6 +63,8 @@ const App = () => {
             id: String(b.id),
             start: normalizeDateTime(b.start),
             end: normalizeDateTime(b.end),
+            rolling: !!b.rolling,
+            rollingOrder: b.rollingOrder ? Number(b.rollingOrder) : 0,
           })));
         }
         setLoading(false);
@@ -97,20 +80,21 @@ const App = () => {
     if (editingId) setTimeout(() => nameInputRef.current?.focus(), 0);
   }, [editingId]);
 
-  const checkCollision = useMemo(() => {
-    const collisions = {};
+  // 롤링 아닌 배너끼리만 충돌 감지
+  const collisionInfo = useMemo(() => {
+    const result = {};
     banners.forEach(b1 => {
+      if (b1.rolling) { result[b1.id] = false; return; }
       const s1 = new Date(b1.start).getTime();
       const e1 = new Date(b1.end).getTime();
-      const isColliding = banners.some(b2 => {
-        if (b1.id === b2.id || b1.slot !== b2.slot) return false;
+      result[b1.id] = banners.some(b2 => {
+        if (b1.id === b2.id || b1.slot !== b2.slot || b2.rolling) return false;
         const s2 = new Date(b2.start).getTime();
         const e2 = new Date(b2.end).getTime();
         return s1 <= e2 && s2 <= e1;
       });
-      collisions[b1.id] = isColliding;
     });
-    return collisions;
+    return result;
   }, [banners]);
 
   const handleSlotNameChange = (oldName, newName) => {
@@ -119,30 +103,21 @@ const App = () => {
     setBanners(prev => prev.map(b => b.slot === oldName ? { ...b, slot: newName } : b));
   };
 
-  // 간트 드래그용 날짜 포맷 (날짜만)
   const formatDateOnly = (date) => {
     const d = new Date(date);
-    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+    return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
   };
 
-  // 드래그 시 datetime 유지하면서 날짜만 변경
-  const shiftDateTime = (datetimeStr, daysDiff) => {
-    const d = new Date(datetimeStr);
-    d.setDate(d.getDate() + daysDiff);
-    const yyyy = d.getFullYear();
-    const mm = String(d.getMonth() + 1).padStart(2, '0');
-    const dd = String(d.getDate()).padStart(2, '0');
-    const hh = String(d.getHours()).padStart(2, '0');
-    const min = String(d.getMinutes()).padStart(2, '0');
-    return `${yyyy}-${mm}-${dd}T${hh}:${min}`;
+  const shiftDateTime = (str, days) => {
+    const d = new Date(str);
+    d.setDate(d.getDate() + days);
+    return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}T${String(d.getHours()).padStart(2,'0')}:${String(d.getMinutes()).padStart(2,'0')}`;
   };
 
-  const getStatus = (startStr, endStr) => {
+  const getStatus = (s, e) => {
     const now = new Date();
-    const start = new Date(startStr);
-    const end = new Date(endStr);
-    if (end < now) return '종료';
-    if (start > now) return '대기';
+    if (new Date(e) < now) return '종료';
+    if (new Date(s) > now) return '대기';
     return '진행중';
   };
 
@@ -151,7 +126,7 @@ const App = () => {
     for (let i = -10; i <= 20; i++) {
       const d = new Date(currentDate);
       d.setDate(currentDate.getDate() + i);
-      range.push(new Date(d.setHours(0, 0, 0, 0)));
+      range.push(new Date(d.setHours(0,0,0,0)));
     }
     return range;
   }, [currentDate]);
@@ -160,20 +135,12 @@ const App = () => {
   const viewEnd = dateRange[dateRange.length - 1];
 
   const isToday = (date) => {
-    const now = new Date();
-    return date.getFullYear() === now.getFullYear() &&
-           date.getMonth() === now.getMonth() &&
-           date.getDate() === now.getDate();
+    const n = new Date();
+    return date.getFullYear()===n.getFullYear() && date.getMonth()===n.getMonth() && date.getDate()===n.getDate();
   };
 
-  const displaySlots = showOnlyVisible
-    ? allSlots.filter(slot => visibleSlots[slot])
-    : allSlots;
-
-  const filteredBanners = banners.filter(banner => {
-    if (activeTab === '전체') return true;
-    return getStatus(banner.start, banner.end) === activeTab;
-  });
+  const displaySlots = showOnlyVisible ? allSlots.filter(s => visibleSlots[s]) : allSlots;
+  const filteredBanners = banners.filter(b => activeTab === '전체' || getStatus(b.start, b.end) === activeTab);
 
   const [dragging, setDragging] = useState(null);
   const [dropTargetSlot, setDropTargetSlot] = useState(null);
@@ -184,348 +151,272 @@ const App = () => {
     const slotLayouts = {};
     displaySlots.forEach(slot => {
       const el = slotRefs.current[slot];
-      if (el) {
-        const rect = el.getBoundingClientRect();
-        slotLayouts[slot] = { top: rect.top, bottom: rect.bottom };
-      }
+      if (el) { const r = el.getBoundingClientRect(); slotLayouts[slot] = { top: r.top, bottom: r.bottom }; }
     });
-    setDragging({
-      id: banner.id, type,
-      startX: e.clientX, startY: e.clientY,
-      initialStart: banner.start,
-      initialEnd: banner.end,
-      initialSlot: banner.slot,
-      slotLayouts
-    });
+    setDragging({ id: banner.id, type, startX: e.clientX, startY: e.clientY,
+      initialStart: banner.start, initialEnd: banner.end, initialSlot: banner.slot, slotLayouts });
     setDropTargetSlot(banner.slot);
   };
 
   useEffect(() => {
-    const handleMouseMove = (e) => {
+    const onMove = (e) => {
       if (!dragging) return;
-      const deltaX = e.clientX - dragging.startX;
-      const daysDiff = Math.round(deltaX / 40);
+      const days = Math.round((e.clientX - dragging.startX) / 40);
       let newSlot = dragging.initialSlot;
       if (dragging.type === 'move') {
-        for (const [slotName, rect] of Object.entries(dragging.slotLayouts)) {
-          if (e.clientY >= rect.top && e.clientY <= rect.bottom) {
-            newSlot = slotName; break;
-          }
+        for (const [s, r] of Object.entries(dragging.slotLayouts)) {
+          if (e.clientY >= r.top && e.clientY <= r.bottom) { newSlot = s; break; }
         }
         setDropTargetSlot(newSlot);
       }
       setBanners(prev => prev.map(b => {
         if (b.id !== dragging.id) return b;
-        let newStart = dragging.initialStart;
-        let newEnd = dragging.initialEnd;
-        if (dragging.type === 'move') {
-          newStart = shiftDateTime(dragging.initialStart, daysDiff);
-          newEnd = shiftDateTime(dragging.initialEnd, daysDiff);
-        } else if (dragging.type === 'resize-start') {
-          newStart = shiftDateTime(dragging.initialStart, daysDiff);
-          if (new Date(newStart) >= new Date(newEnd))
-            newStart = shiftDateTime(dragging.initialEnd, -1);
-        } else if (dragging.type === 'resize-end') {
-          newEnd = shiftDateTime(dragging.initialEnd, daysDiff);
-          if (new Date(newEnd) <= new Date(newStart))
-            newEnd = shiftDateTime(dragging.initialStart, 1);
+        let ns = dragging.initialStart, ne = dragging.initialEnd;
+        if (dragging.type === 'move') { ns = shiftDateTime(ns, days); ne = shiftDateTime(ne, days); }
+        else if (dragging.type === 'resize-start') {
+          ns = shiftDateTime(ns, days);
+          if (new Date(ns) >= new Date(ne)) ns = shiftDateTime(dragging.initialEnd, -1);
+        } else {
+          ne = shiftDateTime(ne, days);
+          if (new Date(ne) <= new Date(ns)) ne = shiftDateTime(dragging.initialStart, 1);
         }
-        return { ...b, start: newStart, end: newEnd, slot: newSlot };
+        return { ...b, start: ns, end: ne, slot: newSlot };
       }));
     };
-    const handleMouseUp = () => { setDragging(null); setDropTargetSlot(null); };
-    if (dragging) {
-      window.addEventListener('mousemove', handleMouseMove);
-      window.addEventListener('mouseup', handleMouseUp);
-    }
-    return () => {
-      window.removeEventListener('mousemove', handleMouseMove);
-      window.removeEventListener('mouseup', handleMouseUp);
-    };
+    const onUp = () => { setDragging(null); setDropTargetSlot(null); };
+    if (dragging) { window.addEventListener('mousemove', onMove); window.addEventListener('mouseup', onUp); }
+    return () => { window.removeEventListener('mousemove', onMove); window.removeEventListener('mouseup', onUp); };
   }, [dragging]);
 
   const startEdit = (e, banner) => {
-    e.stopPropagation();
-    e.preventDefault();
+    e.stopPropagation(); e.preventDefault();
     setEditingId(banner.id);
     setEditForm({ name: banner.name, dept: banner.dept || '' });
   };
-
   const commitEdit = () => {
     if (!editingId) return;
-    setBanners(prev => prev.map(b =>
-      b.id === editingId ? { ...b, name: editForm.name, dept: editForm.dept } : b
-    ));
+    setBanners(prev => prev.map(b => b.id === editingId ? { ...b, ...editForm } : b));
     setEditingId(null);
   };
-
   const cancelEdit = () => setEditingId(null);
 
   const handleSave = () => {
     setSaving(true);
-    fetch(SCRIPT_URL, {
-      method: 'POST',
-      body: JSON.stringify({ action: 'save', data: banners }),
-    }).finally(() => {
-      setSaving(false);
-      setHasUnsaved(false);
-    });
+    fetch(SCRIPT_URL, { method: 'POST', body: JSON.stringify({ action: 'save', data: banners }) })
+      .finally(() => { setSaving(false); setHasUnsaved(false); });
   };
 
-  // 새 배너 기본값: 오늘 00:00 ~ +4일 23:59
-  const makeDefaultDatetime = (addDays = 0, endOfDay = false) => {
+  const makeDefault = (addDays, endOfDay) => {
     const d = new Date();
     d.setDate(d.getDate() + addDays);
-    const yyyy = d.getFullYear();
-    const mm = String(d.getMonth() + 1).padStart(2, '0');
-    const dd = String(d.getDate()).padStart(2, '0');
-    return endOfDay ? `${yyyy}-${mm}-${dd}T23:59` : `${yyyy}-${mm}-${dd}T00:00`;
+    return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}T${endOfDay?'23:59':'00:00'}`;
   };
 
-  if (loading) {
-    return (
-      <div className="flex items-center justify-center h-screen bg-gray-50">
-        <div className="text-center">
-          <div className="w-10 h-10 border-4 border-blue-500 border-t-transparent rounded-full animate-spin mx-auto mb-4"></div>
-          <p className="text-slate-500 font-medium">데이터 불러오는 중...</p>
-        </div>
+  const updateBanner = (id, patch) => setBanners(prev => prev.map(b => b.id === id ? { ...b, ...patch } : b));
+
+  if (loading) return (
+    <div className="flex items-center justify-center h-screen bg-slate-50">
+      <div className="text-center">
+        <div className="w-8 h-8 border-4 border-blue-400 border-t-transparent rounded-full animate-spin mx-auto mb-3" />
+        <p className="text-slate-400 text-sm">불러오는 중...</p>
       </div>
-    );
-  }
+    </div>
+  );
 
   return (
-    <div className={`flex flex-col h-screen bg-gray-50 text-slate-800 overflow-hidden font-sans select-none ${dragging ? 'cursor-grabbing' : ''}`}>
+    <div className={`flex flex-col h-screen bg-slate-50 text-slate-700 overflow-hidden font-sans select-none ${dragging ? 'cursor-grabbing' : ''}`}>
 
-      <div className="flex items-center justify-between px-6 py-4 bg-white border-b shadow-sm z-50">
-        <div className="flex items-center gap-6">
-          <h1 className="flex flex-col leading-tight">
-            <span className="text-xl font-bold text-slate-900 tracking-tight">🍦배너 관리</span>
-            <span className="text-[11px] font-medium text-slate-400 tracking-wide">i-Scream Banner Management</span>
-          </h1>
-          <div className="flex items-center gap-2 bg-slate-100 px-3 py-1.5 rounded-full border border-slate-200 text-sm font-medium">
-            <ChevronLeft className="cursor-pointer hover:text-blue-600 transition-colors" onClick={() => {
-              const d = new Date(currentDate); d.setMonth(d.getMonth() - 1); setCurrentDate(d);
-            }} />
-            <div className="flex items-center gap-1 min-w-[90px] justify-center font-bold">
-              <Calendar size={14} className="text-blue-500" />
-              {currentDate.getFullYear()}. {currentDate.getMonth() + 1}
-            </div>
-            <ChevronRight className="cursor-pointer hover:text-blue-600 transition-colors" onClick={() => {
-              const d = new Date(currentDate); d.setMonth(d.getMonth() + 1); setCurrentDate(d);
-            }} />
+      {/* ── 헤더 ── */}
+      <div className="flex items-center justify-between px-6 py-3 bg-white border-b border-slate-100 z-50">
+        <div className="flex items-center gap-5">
+          <div>
+            <h1 className="text-base font-bold text-slate-800 leading-tight">🍦배너 관리</h1>
+            <p className="text-[10px] text-slate-400 leading-tight">i-Scream Banner Management</p>
+          </div>
+          <div className="flex items-center gap-1 bg-slate-100 px-2.5 py-1.5 rounded-full text-sm">
+            <ChevronLeft size={14} className="cursor-pointer text-slate-400 hover:text-blue-500" onClick={() => { const d=new Date(currentDate); d.setMonth(d.getMonth()-1); setCurrentDate(d); }} />
+            <span className="flex items-center gap-1 font-semibold text-slate-600 min-w-[72px] justify-center text-xs">
+              <Calendar size={12} className="text-blue-400" />
+              {currentDate.getFullYear()}. {currentDate.getMonth()+1}
+            </span>
+            <ChevronRight size={14} className="cursor-pointer text-slate-400 hover:text-blue-500" onClick={() => { const d=new Date(currentDate); d.setMonth(d.getMonth()+1); setCurrentDate(d); }} />
           </div>
         </div>
-        <div className="flex items-center gap-3">
-          <label className="flex items-center gap-2 bg-white border px-4 py-2 rounded-lg text-sm cursor-pointer shadow-sm hover:bg-slate-50 transition-colors">
-            <input
-              type="checkbox"
-              checked={showOnlyVisible}
-              onChange={(e) => setShowOnlyVisible(e.target.checked)}
-              className="w-4 h-4 rounded text-blue-600 focus:ring-blue-500 cursor-pointer"
-            />
-            <span className="font-semibold text-slate-600">활성 구좌만 보기</span>
+        <div className="flex items-center gap-2.5">
+          {hasUnsaved && !saving && (
+            <span className="text-[11px] text-amber-500 font-semibold flex items-center gap-1 bg-amber-50 px-2.5 py-1 rounded-full border border-amber-200">
+              <span className="w-1.5 h-1.5 rounded-full bg-amber-400 animate-pulse inline-block" /> 저장되지 않은 변경사항
+            </span>
+          )}
+          <label className="flex items-center gap-1.5 text-xs text-slate-500 cursor-pointer font-medium">
+            <input type="checkbox" checked={showOnlyVisible} onChange={e => setShowOnlyVisible(e.target.checked)} className="w-3.5 h-3.5 rounded text-blue-500 cursor-pointer" />
+            활성 구좌만 보기
           </label>
-
           <div className="relative">
             {hasUnsaved && !saving && (
-              <span className="absolute -top-1.5 -right-1.5 flex h-3.5 w-3.5 z-10">
-                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-amber-400 opacity-75"></span>
-                <span className="relative inline-flex rounded-full h-3.5 w-3.5 bg-amber-400"></span>
+              <span className="absolute -top-1 -right-1 flex h-3 w-3 z-10">
+                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-amber-400 opacity-75" />
+                <span className="relative inline-flex rounded-full h-3 w-3 bg-amber-400" />
               </span>
             )}
-            <button
-              onClick={handleSave}
-              className={`flex items-center gap-2 px-5 py-2 rounded-lg font-bold shadow-md transition-all active:scale-95
-                ${saving ? 'bg-emerald-400 cursor-not-allowed text-white'
-                  : hasUnsaved ? 'bg-amber-500 hover:bg-amber-600 text-white ring-2 ring-amber-300 ring-offset-1'
-                  : 'bg-emerald-600 hover:bg-emerald-700 text-white'}`}
-            >
-              <Save size={18} className={saving ? 'animate-pulse' : hasUnsaved ? 'animate-bounce' : ''} />
-              {saving ? '저장 중...' : hasUnsaved ? '저장 필요!' : '저장'}
+            <button onClick={handleSave} className={`flex items-center gap-1.5 px-4 py-1.5 rounded-full text-xs font-bold shadow-sm transition-all active:scale-95 ${saving?'bg-emerald-300 cursor-not-allowed text-white':hasUnsaved?'bg-amber-500 hover:bg-amber-600 text-white':'bg-emerald-500 hover:bg-emerald-600 text-white'}`}>
+              <Save size={13} className={saving?'animate-pulse':''} />
+              {saving?'저장 중...':hasUnsaved?'저장 필요!':'저장'}
             </button>
           </div>
-
-          <button
-            onClick={() => {
-              const id = Date.now().toString();
-              setBanners([...banners, {
-                id, name: '새 배너', slot: allSlots[0],
-                start: makeDefaultDatetime(0, false),
-                end: makeDefaultDatetime(4, true),
-                dept: '기타', color: '#E2E8F0', memo: ''
-              }]);
-            }}
-            className="flex items-center gap-2 bg-blue-600 hover:bg-blue-700 text-white px-5 py-2 rounded-lg font-bold shadow-md transition-all active:scale-95"
-          >
-            <Plus size={18} /> 배너 추가
+          <button onClick={() => setBanners(prev => [...prev, { id: Date.now().toString(), name: '새 배너', slot: allSlots[0], start: makeDefault(0,false), end: makeDefault(4,true), dept: '', color: '#DBEAFE', memo: '', rolling: false, rollingOrder: 0 }])}
+            className="flex items-center gap-1.5 bg-blue-500 hover:bg-blue-600 text-white px-4 py-1.5 rounded-full text-xs font-bold shadow-sm transition-all active:scale-95">
+            <Plus size={13} /> 배너 추가
           </button>
         </div>
       </div>
 
-      <div className="flex-1 overflow-auto p-6 space-y-6">
+      <div className="flex-1 overflow-auto p-5 space-y-5">
 
-        {/* 간트차트 */}
-        <div className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden flex flex-col">
+        {/* ── 간트차트 ── */}
+        <div className="bg-white rounded-2xl border border-slate-100 shadow-sm overflow-hidden">
           <div className="overflow-x-auto overflow-y-hidden">
             <table className="w-full border-collapse table-fixed min-w-max">
               <thead>
-                <tr className="bg-slate-50 border-b">
-                  <th className="w-52 sticky left-0 z-40 bg-slate-50 border-r p-3 text-xs font-bold text-slate-400 uppercase tracking-wider text-left shadow-[1px_0_0_0_#e2e8f0]">
-                    구좌 리스트
+                <tr className="border-b border-slate-100">
+                  <th className="w-44 sticky left-0 z-40 bg-white border-r border-slate-100 p-3 text-left">
+                    <span className="text-[10px] font-bold text-slate-300 uppercase tracking-widest">구좌 리스트</span>
                   </th>
-                  {dateRange.map((date, idx) => (
-                    <th key={idx} className={`w-[40px] border-r p-2 text-center text-xs font-semibold
-                      ${date.getDay() === 0 ? 'text-red-500' : date.getDay() === 6 ? 'text-blue-500' : 'text-slate-400'}
-                      ${isToday(date) ? 'bg-blue-50' : ''}`}>
-                      <div className="opacity-60 mb-1">{['일','월','화','수','목','금','토'][date.getDay()]}</div>
-                      <div className={isToday(date) ? 'bg-blue-600 text-white rounded-full w-6 h-6 flex items-center justify-center mx-auto' : ''}>
-                        {date.getDate()}
-                      </div>
-                    </th>
-                  ))}
+                  {dateRange.map((date, idx) => {
+                    const today = isToday(date);
+                    const sun = date.getDay()===0, sat = date.getDay()===6;
+                    return (
+                      <th key={idx} className={`w-[40px] border-r border-slate-100 p-1 text-center ${today?'bg-blue-50':''}`}>
+                        <div className={`text-[9px] font-semibold mb-0.5 ${sun?'text-red-400':sat?'text-blue-400':'text-slate-300'}`}>
+                          {['일','월','화','수','목','금','토'][date.getDay()]}
+                        </div>
+                        {today
+                          ? <div className="bg-blue-500 text-white text-[10px] font-bold rounded-full w-5 h-5 flex items-center justify-center mx-auto">{date.getDate()}</div>
+                          : <div className={`text-[11px] font-semibold ${sun?'text-red-400':sat?'text-blue-400':'text-slate-400'}`}>{date.getDate()}</div>
+                        }
+                      </th>
+                    );
+                  })}
                 </tr>
               </thead>
               <tbody>
                 {displaySlots.map(slot => (
-                  <tr
-                    key={slot}
-                    ref={el => slotRefs.current[slot] = el}
-                    className={`h-14 border-b group transition-colors ${visibleSlots[slot] ? '' : 'opacity-30 bg-slate-50'} ${dropTargetSlot === slot ? 'bg-blue-50/50' : ''}`}
-                  >
-                    <td className={`sticky left-0 z-30 border-r px-4 flex items-center justify-between h-14 shadow-[2px_0_5px_rgba(0,0,0,0.02)] transition-colors ${dropTargetSlot === slot ? 'bg-blue-100/50' : 'bg-white'}`}>
-                      <input
-                        className={`text-sm font-bold bg-transparent outline-none focus:bg-white focus:ring-1 focus:ring-blue-200 rounded px-1 w-full transition-all ${visibleSlots[slot] ? 'text-slate-600' : 'text-slate-400 line-through'}`}
-                        defaultValue={slot}
-                        onBlur={(e) => handleSlotNameChange(slot, e.target.value)}
-                        onKeyDown={(e) => e.key === 'Enter' && e.target.blur()}
-                      />
-                      <button
-                        onClick={() => setVisibleSlots(v => ({ ...v, [slot]: !v[slot] }))}
-                        className={`p-1.5 rounded transition-colors ml-1 ${visibleSlots[slot] ? 'text-slate-300 hover:text-blue-500 hover:bg-white' : 'text-blue-500 bg-blue-50'}`}
-                      >
-                        {visibleSlots[slot] ? <Eye size={16} /> : <EyeOff size={16} />}
-                      </button>
+                  <tr key={slot} ref={el => slotRefs.current[slot]=el}
+                    className={`h-12 border-b border-slate-50 transition-colors ${visibleSlots[slot]?'':'opacity-25'} ${dropTargetSlot===slot?'bg-blue-50/40':''}`}>
+                    <td className={`sticky left-0 z-30 border-r border-slate-100 px-3 h-12 shadow-[1px_0_0_0_#f1f5f9] transition-colors ${dropTargetSlot===slot?'bg-blue-50':'bg-white'}`}>
+                      <div className="flex items-center justify-between gap-1">
+                        <input className={`text-xs font-semibold bg-transparent outline-none focus:bg-slate-50 rounded px-1 w-full ${visibleSlots[slot]?'text-slate-500':'text-slate-300 line-through'}`}
+                          defaultValue={slot} onBlur={e=>handleSlotNameChange(slot,e.target.value)} onKeyDown={e=>e.key==='Enter'&&e.target.blur()} />
+                        <button onClick={()=>setVisibleSlots(v=>({...v,[slot]:!v[slot]}))}
+                          className={`p-1 rounded flex-shrink-0 ${visibleSlots[slot]?'text-slate-200 hover:text-blue-400':'text-blue-400'}`}>
+                          {visibleSlots[slot]?<Eye size={13}/>:<EyeOff size={13}/>}
+                        </button>
+                      </div>
                     </td>
                     {dateRange.map((date, idx) => {
                       const dateStr = formatDateOnly(date);
                       return (
-                        <td key={idx} className={`border-r relative ${isToday(date) ? 'bg-blue-50/20' : ''}`}>
-                          {isToday(date) && <div className="absolute inset-y-0 left-1/2 w-0.5 bg-blue-400/30 z-0 pointer-events-none"></div>}
-                          {visibleSlots[slot] && banners
-                            .filter(b => {
-                              const bDateOnly = toDateOnly(b.start);
-                              const bEndOnly = toDateOnly(b.end);
-                              const bStartDate = new Date(bDateOnly);
-                              const viewStartDate = new Date(formatDateOnly(viewStart));
-                              if (bStartDate < viewStartDate) {
-                                return b.slot === slot && idx === 0 && bEndOnly >= formatDateOnly(viewStart);
-                              }
-                              return b.slot === slot && bDateOnly === dateStr;
-                            })
-                            .map(banner => {
-                              const bStartOnly = toDateOnly(banner.start);
-                              const bEndOnly = toDateOnly(banner.end);
-                              const viewStartStr = formatDateOnly(viewStart);
-                              const viewEndStr = formatDateOnly(viewEnd);
-                              const dispStart = bStartOnly < viewStartStr ? viewStartStr : bStartOnly;
-                              const dispEnd = bEndOnly > viewEndStr ? viewEndStr : bEndOnly;
-                              const duration = Math.round((new Date(dispEnd) - new Date(dispStart)) / 86400000) + 1;
-                              const hasCollision = checkCollision[banner.id];
-                              const isDraggingThis = dragging?.id === banner.id;
-                              const isEditingThis = editingId === banner.id;
+                        <td key={idx} className={`border-r border-slate-50 relative ${isToday(date)?'bg-blue-50/30':''}`}>
+                          {isToday(date) && <div className="absolute inset-y-0 left-1/2 w-px bg-blue-300/40 z-0 pointer-events-none"/>}
+                          {visibleSlots[slot] && banners.filter(b => {
+                            const bs = toDateOnly(b.start), be = toDateOnly(b.end);
+                            if (new Date(bs) < new Date(formatDateOnly(viewStart))) {
+                              return b.slot===slot && idx===0 && be>=formatDateOnly(viewStart);
+                            }
+                            return b.slot===slot && bs===dateStr;
+                          }).map(banner => {
+                            const bs = toDateOnly(banner.start), be = toDateOnly(banner.end);
+                            const vs = formatDateOnly(viewStart), ve = formatDateOnly(viewEnd);
+                            const ds = bs<vs?vs:bs, de = be>ve?ve:be;
+                            const duration = Math.round((new Date(de)-new Date(ds))/86400000)+1;
+                            const hasCollision = collisionInfo[banner.id];
+                            const isRolling = !!banner.rolling;
+                            const rollingOrder = banner.rollingOrder || 0;
+                            const isDragging = dragging?.id===banner.id;
+                            const isEditing = editingId===banner.id;
 
-                              return (
-                                <div
-                                  key={banner.id}
-                                  onMouseDown={(e) => !isEditingThis && handleMouseDown(e, banner, 'move')}
-                                  style={{
-                                    width: `calc(${duration * 40}px - 4px)`,
-                                    backgroundColor: banner.color,
-                                    top: '10px', left: '2px',
-                                    zIndex: isDraggingThis ? 1000 : isEditingThis ? 200 : 20,
-                                    opacity: isDraggingThis ? 0.8 : 1,
-                                    transform: isDraggingThis ? 'scale(1.02)' : 'none',
-                                    minWidth: isEditingThis ? '230px' : undefined,
-                                  }}
-                                  className={`absolute h-8 rounded-lg shadow-sm border border-black/10 flex items-center overflow-visible transition-all ring-1 ring-inset group/bar
-                                    ${isEditingThis ? 'cursor-default ring-blue-400 ring-2 shadow-lg' : 'cursor-grab active:cursor-grabbing'}
-                                    ${hasCollision && !isEditingThis ? 'ring-red-500 ring-2' : ''}
-                                    ${isDraggingThis ? 'shadow-xl brightness-105' : !isEditingThis ? 'hover:brightness-95' : ''}`}
-                                >
-                                  {!isEditingThis && (
-                                    <div className="absolute left-0 top-0 w-2 h-full cursor-ew-resize hover:bg-black/10 z-30 rounded-l-lg"
-                                      onMouseDown={(e) => handleMouseDown(e, banner, 'resize-start')} />
-                                  )}
+                            return (
+                              <div key={banner.id}
+                                onMouseDown={e=>!isEditing&&handleMouseDown(e,banner,'move')}
+                                style={{
+                                  width:`calc(${duration*40}px - 6px)`,
+                                  backgroundColor: banner.color||'#DBEAFE',
+                                  top:'8px', left:'3px', height:'28px',
+                                  zIndex: isDragging?1000:isEditing?200:20,
+                                  opacity: isDragging?0.85:1,
+                                  transform: isDragging?'scale(1.02) translateY(-1px)':'none',
+                                  minWidth: isEditing?'230px':undefined,
+                                }}
+                                className={`absolute rounded-xl flex items-center overflow-hidden transition-all group/bar border border-white/60 shadow-sm
+                                  ${isEditing?'cursor-default ring-2 ring-blue-400 ring-offset-1':'cursor-grab active:cursor-grabbing'}
+                                  ${hasCollision&&!isEditing?'ring-2 ring-red-400 ring-offset-1':''}
+                                  ${isDragging?'shadow-lg':!isEditing?'hover:brightness-95 hover:shadow-md':''}`}
+                              >
+                                {/* 리사이즈 핸들 */}
+                                {!isEditing && <div className="absolute left-0 top-0 w-2 h-full cursor-ew-resize z-30 rounded-l-xl" onMouseDown={e=>handleMouseDown(e,banner,'resize-start')}/>}
+                                {!isEditing && <div className="absolute right-0 top-0 w-2 h-full cursor-ew-resize z-30 rounded-r-xl" onMouseDown={e=>handleMouseDown(e,banner,'resize-end')}/>}
 
-                                  {/* 일반 보기 */}
-                                  {!isEditingThis && (
-                                    <div className="flex items-center w-full h-full overflow-hidden">
-                                      <div className="flex items-center px-2 gap-1.5 overflow-hidden flex-1 pointer-events-none">
-                                        {hasCollision && <AlertCircle size={12} className="text-red-600 animate-pulse flex-shrink-0" />}
-                                        {banner.dept && (
-                                          <span className="text-[9px] px-1 bg-black/10 rounded font-black text-slate-700 whitespace-nowrap flex-shrink-0">
-                                            [{banner.dept}]
-                                          </span>
-                                        )}
-                                        <span className="text-[11px] font-bold text-slate-800 truncate drop-shadow-sm">{banner.name}</span>
-                                      </div>
-                                      <button
-                                        onMouseDown={(e) => e.stopPropagation()}
-                                        onClick={(e) => startEdit(e, banner)}
-                                        className="flex-shrink-0 mr-1 opacity-0 group-hover/bar:opacity-100 transition-opacity bg-white/80 hover:bg-white rounded p-0.5 shadow-sm border border-slate-200/80 z-40"
-                                        title="이름/부서 수정"
-                                      >
-                                        <Pencil size={10} className="text-slate-500" />
-                                      </button>
+                                {/* 일반 보기 */}
+                                {!isEditing && (
+                                  <div className="flex items-center w-full h-full px-2 gap-1.5">
+                                    <svg width="7" height="11" viewBox="0 0 7 11" fill="currentColor" className="flex-shrink-0 text-slate-500/50 pointer-events-none">
+                                      <circle cx="1.5" cy="1.5" r="1.2"/><circle cx="5.5" cy="1.5" r="1.2"/>
+                                      <circle cx="1.5" cy="5.5" r="1.2"/><circle cx="5.5" cy="5.5" r="1.2"/>
+                                      <circle cx="1.5" cy="9.5" r="1.2"/><circle cx="5.5" cy="9.5" r="1.2"/>
+                                    </svg>
+                                    <div className="flex items-center gap-1.5 flex-1 min-w-0 overflow-hidden pointer-events-none">
+                                      {hasCollision && <AlertCircle size={11} className="text-red-500 animate-pulse flex-shrink-0"/>}
+                                      {isRolling && (
+                                        <span className="text-[8px] px-1 py-0.5 bg-violet-500/20 text-violet-700 rounded font-black whitespace-nowrap flex-shrink-0 border border-violet-300/40">
+                                          롤링{rollingOrder ? ` ${rollingOrder}` : ''}
+                                        </span>
+                                      )}
+                                      {banner.dept && (
+                                        <span className="text-[9px] px-1.5 py-0.5 bg-black/10 rounded-full font-bold text-slate-600 whitespace-nowrap flex-shrink-0">{banner.dept}</span>
+                                      )}
+                                      <span className="text-[11px] font-semibold text-slate-700 truncate">{banner.name}</span>
                                     </div>
-                                  )}
+                                    <button onMouseDown={e=>e.stopPropagation()} onClick={e=>startEdit(e,banner)}
+                                      className="flex-shrink-0 opacity-0 group-hover/bar:opacity-100 transition-opacity bg-white/90 hover:bg-white rounded-md p-0.5 shadow-sm border border-black/5 z-40">
+                                      <Pencil size={10} className="text-slate-500"/>
+                                    </button>
+                                  </div>
+                                )}
 
-                                  {/* 편집 모드 */}
-                                  {isEditingThis && (
-                                    <div className="flex items-center w-full h-full px-1.5 gap-1" onMouseDown={(e) => e.stopPropagation()}>
-                                      <input
-                                        ref={deptInputRef}
-                                        className="w-16 h-5 text-[10px] font-black bg-black/10 rounded px-1 outline-none focus:ring-1 focus:ring-blue-400 text-slate-700 placeholder:text-slate-400 flex-shrink-0"
-                                        placeholder="부서"
-                                        value={editForm.dept}
-                                        onChange={(e) => setEditForm(f => ({ ...f, dept: e.target.value }))}
-                                        onClick={(e) => e.stopPropagation()}
-                                        onKeyDown={(e) => {
-                                          if (e.key === 'Enter') commitEdit();
-                                          if (e.key === 'Escape') cancelEdit();
-                                          if (e.key === 'Tab') { e.preventDefault(); nameInputRef.current?.focus(); }
-                                        }}
-                                      />
-                                      <input
-                                        ref={nameInputRef}
-                                        className="flex-1 min-w-0 h-5 text-[11px] font-bold bg-white/80 rounded px-1.5 outline-none focus:ring-1 focus:ring-blue-400 text-slate-800 placeholder:text-slate-400"
-                                        placeholder="배너명"
-                                        value={editForm.name}
-                                        onChange={(e) => setEditForm(f => ({ ...f, name: e.target.value }))}
-                                        onClick={(e) => e.stopPropagation()}
-                                        onKeyDown={(e) => {
-                                          if (e.key === 'Enter') commitEdit();
-                                          if (e.key === 'Escape') cancelEdit();
-                                          if (e.key === 'Tab') { e.preventDefault(); deptInputRef.current?.focus(); }
-                                        }}
-                                      />
-                                      <button onClick={(e) => { e.stopPropagation(); commitEdit(); }} className="flex-shrink-0 bg-blue-500 hover:bg-blue-600 text-white rounded p-0.5">
-                                        <Check size={11} />
-                                      </button>
-                                      <button onClick={(e) => { e.stopPropagation(); cancelEdit(); }} className="flex-shrink-0 bg-slate-200 hover:bg-slate-300 text-slate-600 rounded p-0.5">
-                                        <X size={11} />
-                                      </button>
+                                {/* 메모 뱃지 */}
+                                {!isEditing && banner.memo && (
+                                  <div className="absolute top-1 right-1.5 z-40 pointer-events-none">
+                                    <div className="w-2 h-2 rounded-full bg-orange-400 shadow-sm"/>
+                                  </div>
+                                )}
+
+                                {/* 호버 툴팁 */}
+                                {!isEditing && (
+                                  <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 hidden group-hover/bar:block z-50 pointer-events-none">
+                                    <div className="bg-slate-800 text-white text-[11px] rounded-xl px-3 py-2 shadow-xl max-w-[240px] leading-relaxed text-center">
+                                      <div className="font-bold">{banner.name}</div>
+                                      {banner.memo && <div className="text-slate-300 whitespace-pre-wrap mt-0.5">{banner.memo}</div>}
                                     </div>
-                                  )}
+                                    <div className="w-2 h-2 bg-slate-800 rotate-45 mx-auto -mt-1"/>
+                                  </div>
+                                )}
 
-                                  {!isEditingThis && (
-                                    <div className="absolute right-0 top-0 w-2 h-full cursor-ew-resize hover:bg-black/10 z-30 rounded-r-lg"
-                                      onMouseDown={(e) => handleMouseDown(e, banner, 'resize-end')} />
-                                  )}
-                                </div>
-                              );
-                            })
-                          }
+                                {/* 편집 모드 */}
+                                {isEditing && (
+                                  <div className="flex items-center w-full h-full px-1.5 gap-1" onMouseDown={e=>e.stopPropagation()}>
+                                    <input ref={deptInputRef} className="w-16 h-5 text-[10px] font-bold bg-black/10 rounded-lg px-1.5 outline-none focus:ring-1 focus:ring-blue-400 text-slate-700 placeholder:text-slate-400 flex-shrink-0"
+                                      placeholder="부서" value={editForm.dept} onChange={e=>setEditForm(f=>({...f,dept:e.target.value}))} onClick={e=>e.stopPropagation()}
+                                      onKeyDown={e=>{if(e.key==='Enter')commitEdit();if(e.key==='Escape')cancelEdit();if(e.key==='Tab'){e.preventDefault();nameInputRef.current?.focus();}}}/>
+                                    <input ref={nameInputRef} className="flex-1 min-w-0 h-5 text-[11px] font-semibold bg-white/80 rounded-lg px-1.5 outline-none focus:ring-1 focus:ring-blue-400 text-slate-700 placeholder:text-slate-400"
+                                      placeholder="배너명" value={editForm.name} onChange={e=>setEditForm(f=>({...f,name:e.target.value}))} onClick={e=>e.stopPropagation()}
+                                      onKeyDown={e=>{if(e.key==='Enter')commitEdit();if(e.key==='Escape')cancelEdit();if(e.key==='Tab'){e.preventDefault();deptInputRef.current?.focus();}}}/>
+                                    <button onClick={e=>{e.stopPropagation();commitEdit();}} className="flex-shrink-0 bg-blue-500 hover:bg-blue-600 text-white rounded-lg p-0.5"><Check size={11}/></button>
+                                    <button onClick={e=>{e.stopPropagation();cancelEdit();}} className="flex-shrink-0 bg-slate-200 hover:bg-slate-300 text-slate-600 rounded-lg p-0.5"><X size={11}/></button>
+                                  </div>
+                                )}
+                              </div>
+                            );
+                          })}
                         </td>
                       );
                     })}
@@ -536,138 +427,117 @@ const App = () => {
           </div>
         </div>
 
-        {/* 하단 리스트 */}
-        <div className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden flex flex-col">
-          <div className="p-4 border-b flex justify-between items-center bg-white flex-wrap gap-4">
-            <h2 className="font-bold text-slate-800 flex items-center gap-2 text-base">
-              <Layout size={18} className="text-blue-500" />
+        {/* ── 하단 리스트 ── */}
+        <div className="bg-white rounded-2xl border border-slate-100 shadow-sm overflow-hidden">
+          <div className="px-5 py-3.5 border-b border-slate-100 flex justify-between items-center flex-wrap gap-3">
+            <h2 className="font-bold text-slate-700 flex items-center gap-2 text-sm">
+              <Layout size={15} className="text-blue-400"/>
               배너 데이터 상세 설정
-              <span className="text-blue-500 text-xs px-2 py-0.5 bg-blue-50 rounded-full border border-blue-100 font-semibold ml-1">Total {filteredBanners.length}</span>
+              <span className="text-blue-400 text-[11px] px-2 py-0.5 bg-blue-50 rounded-full border border-blue-100 font-bold">Total {filteredBanners.length}</span>
             </h2>
-            <div className="flex bg-slate-100 p-1 rounded-lg border border-slate-200 shadow-inner">
-              {['전체', '진행중', '대기', '종료'].map((tab) => (
-                <button key={tab} onClick={() => setActiveTab(tab)}
-                  className={`px-4 py-1.5 rounded-md text-xs font-bold transition-all ${activeTab === tab ? 'bg-white text-blue-600 shadow-sm ring-1 ring-slate-200' : 'text-slate-500 hover:text-slate-700'}`}>
-                  {tab}
-                </button>
+            <div className="flex bg-slate-50 p-1 rounded-xl border border-slate-100">
+              {['전체','진행중','대기','종료'].map(tab => (
+                <button key={tab} onClick={()=>setActiveTab(tab)}
+                  className={`px-3 py-1 rounded-lg text-xs font-bold transition-all ${activeTab===tab?'bg-white text-blue-500 shadow-sm':'text-slate-400 hover:text-slate-600'}`}>{tab}</button>
               ))}
             </div>
           </div>
           <div className="overflow-x-auto">
             <table className="w-full text-left border-collapse">
-              <thead className="bg-slate-50 text-[11px] font-bold text-slate-400 uppercase tracking-wider border-b">
+              <thead className="bg-slate-50/60 border-b border-slate-100">
                 <tr>
-                  <th className="p-4 w-28 text-center">현재 상태</th>
-                  <th className="p-4 w-40">배너 명칭</th>
-                  <th className="p-4 w-12 text-center">색상</th>
-                  <th className="p-4 w-36">노출 구좌</th>
-                  <th className="p-4 w-72 text-center">노출 기간 (날짜 · 시간)</th>
-                  <th className="p-4 w-28 text-left">담당 부서</th>
-                  <th className="p-4 w-12 text-center">삭제</th>
+                  {['상태','배너 명칭','담당 부서','색상','노출 구좌','롤링','순서','노출 기간 (날짜 · 시간)','메모','삭제'].map(h => (
+                    <th key={h} className="px-3 py-2.5 text-[10px] font-bold text-slate-400 uppercase tracking-wider text-center whitespace-nowrap">{h}</th>
+                  ))}
                 </tr>
               </thead>
-              <tbody className="divide-y text-sm">
+              <tbody className="divide-y divide-slate-50 text-sm">
                 {filteredBanners.map(banner => {
                   const status = getStatus(banner.start, banner.end);
-                  const hasCollision = checkCollision[banner.id];
-                  const isBeingEdited = editingId === banner.id;
+                  const isEdited = editingId === banner.id;
                   return (
-                    <tr key={banner.id} className={`hover:bg-slate-50/50 transition-colors group ${hasCollision ? 'bg-red-50/30' : ''} ${isBeingEdited ? 'bg-blue-50/40' : ''}`}>
-                      <td className="p-4 text-center">
+                    <tr key={banner.id} className={`transition-colors ${isEdited?'bg-blue-50/30':'hover:bg-slate-50/50'}`}>
+
+                      {/* 상태 */}
+                      <td className="px-3 py-3 text-center">
                         <div className="flex flex-col items-center gap-1">
-                          <span className={`px-2.5 py-1 rounded-full text-[11px] font-bold border block text-center w-full
-                            ${status === '진행중' ? 'bg-emerald-50 text-emerald-600 border-emerald-100'
-                            : status === '대기' ? 'bg-blue-50 text-blue-600 border-blue-100'
-                            : 'bg-slate-100 text-slate-500 border-slate-200'}`}>
-                            {status}
-                          </span>
-                          {hasCollision && (
-                            <span className="text-[9px] font-black text-red-500 flex items-center gap-0.5 mt-1">
-                              <AlertCircle size={10} /> 일정 중첩
-                            </span>
+                          <span className={`px-2 py-0.5 rounded-full text-[11px] font-bold whitespace-nowrap ${status==='진행중'?'bg-emerald-50 text-emerald-500':status==='대기'?'bg-blue-50 text-blue-500':'bg-slate-100 text-slate-400'}`}>{status}</span>
+                          {banner.rolling && (
+                            <span className="text-[9px] font-black text-violet-500 bg-violet-50 px-1.5 py-0.5 rounded-full border border-violet-200 whitespace-nowrap">롤링</span>
                           )}
                         </div>
                       </td>
-                      <td className="p-4">
-                        <input className="bg-transparent border-b border-transparent focus:border-blue-500 outline-none font-semibold w-full transition-all py-1"
-                          value={banner.name}
-                          onChange={(e) => setBanners(prev => prev.map(b => b.id === banner.id ? { ...b, name: e.target.value } : b))} />
+
+                      {/* 배너 명칭 */}
+                      <td className="px-3 py-3">
+                        <input className="bg-transparent border-b border-transparent focus:border-blue-400 outline-none font-semibold text-sm text-slate-700 w-full py-0.5 min-w-[120px]"
+                          value={banner.name} onChange={e=>updateBanner(banner.id,{name:e.target.value})}/>
                       </td>
-                      <td className="p-4 text-center">
-                        <input type="color" className="w-8 h-8 rounded-lg cursor-pointer border-2 border-white shadow-sm"
-                          value={banner.color}
-                          onChange={(e) => setBanners(prev => prev.map(b => b.id === banner.id ? { ...b, color: e.target.value } : b))} />
+
+                      {/* 담당 부서 */}
+                      <td className="px-3 py-3">
+                        <input className="bg-slate-50 hover:bg-slate-100 focus:bg-white border border-slate-100 focus:border-blue-300 rounded-lg px-2 py-1 text-xs font-semibold text-slate-600 w-full text-center outline-none placeholder:text-slate-300"
+                          value={banner.dept||''} placeholder="부서" onChange={e=>updateBanner(banner.id,{dept:e.target.value})}/>
                       </td>
-                      <td className="p-4">
-                        <select className="bg-white border border-slate-200 rounded-md px-2 py-1.5 text-xs outline-none font-medium cursor-pointer focus:ring-1 focus:ring-blue-500 w-full"
-                          value={banner.slot}
-                          onChange={(e) => setBanners(prev => prev.map(b => b.id === banner.id ? { ...b, slot: e.target.value } : b))}>
-                          {allSlots.map(s => <option key={s} value={s}>{s}</option>)}
+
+                      {/* 색상 */}
+                      <td className="px-3 py-3 text-center">
+                        <input type="color" className="w-7 h-7 rounded-lg cursor-pointer border-2 border-white shadow-sm"
+                          value={banner.color} onChange={e=>updateBanner(banner.id,{color:e.target.value})}/>
+                      </td>
+
+                      {/* 노출 구좌 */}
+                      <td className="px-3 py-3">
+                        <select className="bg-white border border-slate-100 rounded-lg px-2 py-1 text-xs outline-none font-medium cursor-pointer focus:ring-1 focus:ring-blue-400 w-full"
+                          value={banner.slot} onChange={e=>updateBanner(banner.id,{slot:e.target.value})}>
+                          {allSlots.map(s=><option key={s} value={s}>{s}</option>)}
                         </select>
                       </td>
 
-                      {/* 날짜 + 시간 입력 */}
-                      <td className="p-4">
-                        <div className="flex flex-col gap-1.5">
-                          {/* 시작 */}
-                          <div className="flex items-center gap-1.5">
-                            <span className="text-[10px] font-black text-slate-400 w-6 text-right flex-shrink-0">시작</span>
-                            <input
-                              type="date"
-                              className="border border-slate-200 rounded px-1.5 py-1 text-[11px] focus:ring-1 focus:ring-blue-500 outline-none w-28"
-                              value={toDateOnly(banner.start)}
-                              onChange={(e) => {
-                                const time = banner.start?.slice(11, 16) || '00:00';
-                                setBanners(prev => prev.map(b => b.id === banner.id ? { ...b, start: `${e.target.value}T${time}` } : b));
-                              }}
-                            />
-                            <input
-                              type="time"
-                              className="border border-slate-200 rounded px-1.5 py-1 text-[11px] focus:ring-1 focus:ring-blue-500 outline-none w-24"
-                              value={banner.start?.slice(11, 16) || '00:00'}
-                              onChange={(e) => {
-                                const date = toDateOnly(banner.start) || toDateOnly(new Date().toISOString());
-                                setBanners(prev => prev.map(b => b.id === banner.id ? { ...b, start: `${date}T${e.target.value}` } : b));
-                              }}
-                            />
-                          </div>
-                          {/* 종료 */}
-                          <div className="flex items-center gap-1.5">
-                            <span className="text-[10px] font-black text-slate-400 w-6 text-right flex-shrink-0">종료</span>
-                            <input
-                              type="date"
-                              className="border border-slate-200 rounded px-1.5 py-1 text-[11px] focus:ring-1 focus:ring-blue-500 outline-none w-28"
-                              value={toDateOnly(banner.end)}
-                              onChange={(e) => {
-                                const time = banner.end?.slice(11, 16) || '23:59';
-                                setBanners(prev => prev.map(b => b.id === banner.id ? { ...b, end: `${e.target.value}T${time}` } : b));
-                              }}
-                            />
-                            <input
-                              type="time"
-                              className="border border-slate-200 rounded px-1.5 py-1 text-[11px] focus:ring-1 focus:ring-blue-500 outline-none w-24"
-                              value={banner.end?.slice(11, 16) || '23:59'}
-                              onChange={(e) => {
-                                const date = toDateOnly(banner.end) || toDateOnly(new Date().toISOString());
-                                setBanners(prev => prev.map(b => b.id === banner.id ? { ...b, end: `${date}T${e.target.value}` } : b));
-                              }}
-                            />
-                          </div>
+                      {/* 롤링 체크 */}
+                      <td className="px-3 py-3 text-center">
+                        <input type="checkbox" checked={!!banner.rolling}
+                          onChange={e=>updateBanner(banner.id,{rolling:e.target.checked, rollingOrder:e.target.checked?(banner.rollingOrder||1):0})}
+                          className="w-4 h-4 rounded cursor-pointer accent-violet-500"/>
+                      </td>
+
+                      {/* 롤링 순서 */}
+                      <td className="px-3 py-3 text-center">
+                        {banner.rolling ? (
+                          <input type="number" min="1" value={banner.rollingOrder||1}
+                            onChange={e=>updateBanner(banner.id,{rollingOrder:parseInt(e.target.value)||1})}
+                            className="w-12 border border-violet-200 rounded-lg px-1.5 py-1 text-xs text-center outline-none focus:ring-1 focus:ring-violet-400 font-bold text-violet-600 bg-violet-50"/>
+                        ) : <span className="text-slate-200 text-xs">—</span>}
+                      </td>
+
+                      {/* 노출 기간 */}
+                      <td className="px-3 py-3">
+                        <div className="flex items-center gap-1.5 flex-nowrap">
+                          <span className="text-[10px] font-bold text-slate-300 whitespace-nowrap">시작</span>
+                          <input type="date" className="border border-slate-100 rounded-lg px-1.5 py-1 text-xs focus:ring-1 focus:ring-blue-400 outline-none"
+                            value={toDateOnly(banner.start)} onChange={e=>updateBanner(banner.id,{start:`${e.target.value}T${banner.start?.slice(11,16)||'00:00'}`})}/>
+                          <input type="time" className="border border-slate-100 rounded-lg px-1.5 py-1 text-xs focus:ring-1 focus:ring-blue-400 outline-none w-24"
+                            value={banner.start?.slice(11,16)||'00:00'} onChange={e=>updateBanner(banner.id,{start:`${toDateOnly(banner.start)}T${e.target.value}`})}/>
+                          <span className="text-slate-200 font-bold flex-shrink-0">~</span>
+                          <span className="text-[10px] font-bold text-slate-300 whitespace-nowrap">종료</span>
+                          <input type="date" className="border border-slate-100 rounded-lg px-1.5 py-1 text-xs focus:ring-1 focus:ring-blue-400 outline-none"
+                            value={toDateOnly(banner.end)} onChange={e=>updateBanner(banner.id,{end:`${e.target.value}T${banner.end?.slice(11,16)||'23:59'}`})}/>
+                          <input type="time" className="border border-slate-100 rounded-lg px-1.5 py-1 text-xs focus:ring-1 focus:ring-blue-400 outline-none w-24"
+                            value={banner.end?.slice(11,16)||'23:59'} onChange={e=>updateBanner(banner.id,{end:`${toDateOnly(banner.end)}T${e.target.value}`})}/>
                         </div>
                       </td>
 
-                      <td className="p-4">
-                        <input
-                          className="bg-slate-100 hover:bg-slate-200 focus:bg-white border border-transparent focus:border-blue-500 rounded px-3 py-1.5 text-[11px] font-bold text-slate-600 w-full text-left transition-all outline-none"
-                          value={banner.dept || ''}
-                          placeholder="부서 입력"
-                          onChange={(e) => setBanners(prev => prev.map(b => b.id === banner.id ? { ...b, dept: e.target.value } : b))}
-                        />
+                      {/* 메모 */}
+                      <td className="px-3 py-3">
+                        <input className="bg-slate-50 hover:bg-slate-100 focus:bg-white border border-slate-100 focus:border-blue-300 rounded-lg px-2 py-1 text-xs text-slate-600 w-full outline-none placeholder:text-slate-300 min-w-[120px]"
+                          value={banner.memo||''} placeholder="메모 입력..." onChange={e=>updateBanner(banner.id,{memo:e.target.value})}/>
                       </td>
-                      <td className="p-4 text-center">
-                        <button onClick={() => setBanners(banners.filter(b => b.id !== banner.id))}
-                          className="text-slate-300 hover:text-red-500 transition-colors p-1.5 hover:bg-red-50 rounded-md">
-                          <Trash2 size={16} />
+
+                      {/* 삭제 */}
+                      <td className="px-3 py-3 text-center">
+                        <button onClick={()=>setBanners(prev=>prev.filter(b=>b.id!==banner.id))}
+                          className="text-slate-200 hover:text-red-400 transition-colors p-1.5 hover:bg-red-50 rounded-lg">
+                          <Trash2 size={14}/>
                         </button>
                       </td>
                     </tr>
@@ -680,6 +550,4 @@ const App = () => {
       </div>
     </div>
   );
-};
-
-export default App;
+}
