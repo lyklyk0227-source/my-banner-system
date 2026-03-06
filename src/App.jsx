@@ -374,7 +374,7 @@ const MainApp = ({ onLogout }) => {
   }, [loading]);
 
   useEffect(() => {
-    fetch(SCRIPT_URL).then(r => r.json()).then(data => {
+    fetch(`${SCRIPT_URL}?t=${Date.now()}`).then(r => r.json()).then(data => {
       if (data && data.length > 0) {
         const loaded = data.map(b => ({ ...b, id: String(b.id), start: normalizeDateTime(b.start), end: normalizeDateTime(b.end) }));
         setBanners(loaded);
