@@ -5,7 +5,21 @@ import {
   AlertCircle, Pencil, Check, X, Lock, Loader, BookOpen
 } from 'lucide-react';
 
-const SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbx0diXr7d94zg5Z79yn62_y3Ln4DV_b7J77k9Mq580GdxBsP3wyhXYRN36OhJlbawJCMg/exec';
+// Firebase 설정
+import { initializeApp } from 'firebase/app';
+import { getFirestore, doc, setDoc, getDoc } from 'firebase/firestore';
+
+const firebaseConfig = {
+  apiKey: "AIzaSyAX8YJewMt8BExZMiNXr1-ODWGgGo8_Zvs",
+  authDomain: "my-banner-34fbd.firebaseapp.com",
+  projectId: "my-banner-34fbd",
+  storageBucket: "my-banner-34fbd.firebasestorage.app",
+  messagingSenderId: "850066679550",
+  appId: "1:850066679550:web:67f5aab5a0b0d26ec327af"
+};
+
+const firebaseApp = initializeApp(firebaseConfig);
+const db = getFirestore(firebaseApp);
 const DEFAULT_SLOTS = ['로고 배너', '레이어', '헤더 배너', '강조형 no.1 (#1)', '강조형 no.2 (#2)', '강조형 no.1 (#3)', '강조형 no.2', '강조형 no.3', '띠 배너 (#1)', '띠 배너 (#2)', '플로팅 배너 (#1)', '플로팅 배너 (#2)', '플로팅 배너 (#3)'];
 const PASSWORD = '1004';
 
@@ -265,7 +279,7 @@ const MainApp = ({ onLogout }) => {
   const doSave = useCallback((data) => {
     clearTimeout(saveTimerRef.current);
     setSaveStatus('saving');
-    fetch(SCRIPT_URL, { method: 'POST', body: JSON.stringify({ action: 'save', data }) })
+    setDoc(doc(db, 'banners', 'data'), { list: data })
       .then(() => { setSaveStatus('saved'); setTimeout(() => setSaveStatus('idle'), 2000); })
       .catch(() => setSaveStatus('error'));
   }, []);
@@ -295,9 +309,7 @@ const MainApp = ({ onLogout }) => {
     const handleUnload = () => {
       if (isFirstLoad.current || bannersRef.current.length === 0) return;
       clearTimeout(saveTimerRef.current);
-      navigator.sendBeacon(SCRIPT_URL, new Blob([
-        JSON.stringify({ action: 'save', data: bannersRef.current })
-      ], { type: 'application/json' }));
+      setDoc(doc(db, 'banners', 'data'), { list: bannersRef.current });
     };
     window.addEventListener('beforeunload', handleUnload);
     return () => window.removeEventListener('beforeunload', handleUnload);
@@ -338,14 +350,11 @@ const MainApp = ({ onLogout }) => {
     };
   }, [loading]);
 
-  // ✅ 캐시 방지: GET 대신 POST로 데이터 로드
+  // Firebase에서 데이터 로드
   useEffect(() => {
-    fetch(SCRIPT_URL, {
-      method: 'POST',
-      redirect: 'follow',
-      body: JSON.stringify({ action: 'load' })
-    }).then(r => r.json()).then(data => {
-      if (data && data.length > 0) {
+    getDoc(doc(db, 'banners', 'data')).then(snapshot => {
+      if (snapshot.exists()) {
+        const data = snapshot.data().list || [];
         const loaded = data.map(b => ({ ...b, id: String(b.id), start: normalizeDateTime(b.start), end: normalizeDateTime(b.end) }));
         setBanners(loaded);
         bannersRef.current = loaded;
