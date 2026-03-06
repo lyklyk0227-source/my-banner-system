@@ -408,14 +408,16 @@ const MainApp = ({ onLogout }) => {
       if (el) { const r = el.getBoundingClientRect(); slotLayouts[slot] = { top: r.top, bottom: r.bottom }; }
     });
     const normDate = (s) => s.slice(0, 10) + 'T00:00';
-    setDragging({ id: banner.id, type, startX: e.clientX, startY: e.clientY, initialStart: normDate(banner.start), initialEnd: normDate(banner.end), initialSlot: banner.slot, slotLayouts });
+    // startX를 40px 셀 단위로 스냅 → 드래그 시 오차 방지
+    const snappedX = Math.round(e.clientX / 40) * 40;
+    setDragging({ id: banner.id, type, startX: snappedX, startY: e.clientY, initialStart: normDate(banner.start), initialEnd: normDate(banner.end), initialSlot: banner.slot, slotLayouts });
     setDropTargetSlot(banner.slot);
   };
 
   useEffect(() => {
     const onMove = (e) => {
       if (!dragging) return;
-      const days = Math.round((e.clientX - dragging.startX) / 40);
+      const days = Math.floor((e.clientX - dragging.startX + 20) / 40);
       let newSlot = dragging.initialSlot;
       if (dragging.type === 'move') {
         for (const [s, r] of Object.entries(dragging.slotLayouts)) {
@@ -594,7 +596,7 @@ const MainApp = ({ onLogout }) => {
                     const isHoliday = HOLIDAYS.has(dateKey);
                     const isRed = isSun || isHoliday;
                     return (
-                      <th key={idx} className={`w-[40px] border-r border-slate-200 p-1 text-center ${today ? 'bg-blue-50' : isRed && !today ? 'bg-red-50/40' : ''}`}>
+                      <th key={idx} style={{borderRight:'1px dashed #e2e8f0'}} className={`w-[40px] p-1 text-center ${today ? 'bg-blue-50' : isRed && !today ? 'bg-red-50/40' : ''}`}>
                         <div className={`text-[11px] font-bold mb-0.5 ${isRed ? 'text-red-400' : isSat ? 'text-blue-400' : 'text-slate-500'}`}>
                           {['일','월','화','수','목','금','토'][date.getDay()]}
                         </div>
@@ -628,7 +630,7 @@ const MainApp = ({ onLogout }) => {
                       const cellIsHoliday = HOLIDAYS.has(dateStr);
                       const cellIsRed = date.getDay() === 0 || cellIsHoliday;
                       return (
-                        <td key={idx} className={`border-r border-slate-200 relative ${isToday(date) ? 'bg-blue-50/30' : cellIsRed ? 'bg-red-50/30' : ''}`}>
+                        <td key={idx} style={{borderRight:'1px dashed #e2e8f0'}} className={`relative ${isToday(date) ? 'bg-blue-50/30' : cellIsRed ? 'bg-red-50/30' : ''}`}>
                           {isToday(date) && <div className="absolute inset-y-0 left-1/2 w-0.5 bg-blue-400/70 z-0 pointer-events-none" />}
                           {visibleSlots[slot] && banners
                             .filter(b => {
@@ -766,7 +768,7 @@ const MainApp = ({ onLogout }) => {
                   ))}
                 </tr>
               </thead>
-              <tbody className="divide-y divide-slate-50 text-sm">
+              <tbody key={`page-${currentPage}-${activeTab}`} className="divide-y divide-slate-50 text-sm">
                 {pagedBanners.map(banner => {
                   const status = getStatus(banner.start, banner.end);
                   const hasCollision = collisionInfo[banner.id];
