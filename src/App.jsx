@@ -416,8 +416,22 @@ const MainApp = ({ onLogout }) => {
   const viewStart = dateRange[0];
   const viewEnd = dateRange[dateRange.length - 1];
   const isToday = (date) => { const n = new Date(); return date.getFullYear()===n.getFullYear()&&date.getMonth()===n.getMonth()&&date.getDate()===n.getDate(); };
+  const [sortBy, setSortBy] = useState('start');
+  const [searchQuery, setSearchQuery] = useState('');
+  const [highlightedId, setHighlightedId] = useState(null);
+
   const displaySlots = showOnlyVisible ? allSlots.filter(s => visibleSlots[s]) : allSlots;
-  const filteredBanners = banners.filter(b => activeTab === '전체' || getStatus(b.start, b.end) === activeTab);
+  const filteredBanners = banners
+    .filter(b => activeTab === '전체' || getStatus(b.start, b.end) === activeTab)
+    .filter(b => !searchQuery || b.name.includes(searchQuery) || (b.dept||'').includes(searchQuery) || b.slot.includes(searchQuery))
+    .sort((a, b) => {
+      if (sortBy === 'start') return new Date(a.start) - new Date(b.start);
+      if (sortBy === 'end') return new Date(a.end) - new Date(b.end);
+      if (sortBy === 'name') return a.name.localeCompare(b.name, 'ko');
+      if (sortBy === 'slot') return allSlots.indexOf(a.slot) - allSlots.indexOf(b.slot);
+      if (sortBy === 'status') return getStatus(a.start, a.end).localeCompare(getStatus(b.start, b.end));
+      return 0;
+    });
   const totalPages = Math.ceil(filteredBanners.length / PAGE_SIZE);
   const pagedBanners = filteredBanners.slice((currentPage - 1) * PAGE_SIZE, currentPage * PAGE_SIZE);
 
@@ -550,15 +564,7 @@ const MainApp = ({ onLogout }) => {
           }} className="flex items-center gap-1.5 bg-blue-500 hover:bg-blue-600 text-white px-4 py-1.5 rounded-full text-xs font-bold shadow-sm transition-all active:scale-95">
             <Plus size={13} /> 배너 추가
           </button>
-          <button
-            onClick={() => {
-              if (isFirstLoad.current || bannersRef.current.length === 0) return;
-              doSave(bannersRef.current);
-            }}
-            className="flex items-center gap-1.5 bg-indigo-400 hover:bg-indigo-500 text-white px-4 py-1.5 rounded-full text-xs font-bold shadow-sm shadow-indigo-200 transition-all active:scale-95">
-            <svg xmlns="http://www.w3.org/2000/svg" width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/><polyline points="17 21 17 13 7 13 7 21"/><polyline points="7 3 7 8 15 8"/></svg>
-            저장
-          </button>
+
         </div>
       </div>
 
@@ -638,6 +644,7 @@ const MainApp = ({ onLogout }) => {
                               const hasCollision = collisionInfo[banner.id];
                               const isDraggingThis = dragging?.id === banner.id;
                               const isEditingThis = editingId === banner.id;
+                              const isHighlightedBar = highlightedId === banner.id;
 
                               return (
                                 <div key={banner.id}
@@ -653,6 +660,7 @@ const MainApp = ({ onLogout }) => {
                                   }}
                                   className={`absolute rounded-xl flex items-center overflow-hidden transition-all group/bar border border-white/60 shadow-sm
                                     ${isEditingThis ? 'cursor-default ring-2 ring-blue-400 ring-offset-1' : 'cursor-grab active:cursor-grabbing'}
+                                    ${isHighlightedBar && !isEditingThis ? 'ring-2 ring-yellow-400 ring-offset-1 brightness-95' : ''}
                                     ${hasCollision && !isEditingThis ? 'ring-2 ring-red-400 ring-offset-1' : ''}
                                     ${isDraggingThis ? 'shadow-lg' : !isEditingThis ? 'hover:brightness-95 hover:shadow-md' : ''}`}
                                 >
@@ -723,19 +731,43 @@ const MainApp = ({ onLogout }) => {
 
         {/* 하단 리스트 */}
         <div className="bg-white rounded-2xl border border-slate-100 shadow-sm overflow-hidden">
-          <div className="px-5 py-3.5 border-b border-slate-100 flex justify-between items-center flex-wrap gap-3">
-            <h2 className="font-bold text-slate-700 flex items-center gap-2 text-sm">
-              <Layout size={15} className="text-blue-400" />
-              배너 데이터 상세 설정
-              <span className="text-blue-400 text-[11px] px-2 py-0.5 bg-blue-50 rounded-full border border-blue-100 font-bold">Total {filteredBanners.length}</span>
-            </h2>
-            <div className="flex bg-slate-50 p-1 rounded-xl border border-slate-100">
-              {['전체','진행중','대기','종료'].map(tab => (
-                <button key={tab} onClick={() => { setActiveTab(tab); setCurrentPage(1); }}
-                  className={`px-3 py-1 rounded-lg text-xs font-bold transition-all ${activeTab === tab ? 'bg-white text-blue-500 shadow-sm' : 'text-slate-400 hover:text-slate-600'}`}>
-                  {tab}
-                </button>
-              ))}
+          <div className="px-5 py-3.5 border-b border-slate-100 flex flex-col gap-2.5">
+            <div className="flex justify-between items-center flex-wrap gap-3">
+              <h2 className="font-bold text-slate-700 flex items-center gap-2 text-sm">
+                <Layout size={15} className="text-blue-400" />
+                배너 데이터 상세 설정
+                <span className="text-blue-400 text-[11px] px-2 py-0.5 bg-blue-50 rounded-full border border-blue-100 font-bold">Total {filteredBanners.length}</span>
+              </h2>
+              <div className="flex bg-slate-50 p-1 rounded-xl border border-slate-100">
+                {['전체','진행중','대기','종료'].map(tab => (
+                  <button key={tab} onClick={() => { setActiveTab(tab); setCurrentPage(1); }}
+                    className={`px-3 py-1 rounded-lg text-xs font-bold transition-all ${activeTab === tab ? 'bg-white text-blue-500 shadow-sm' : 'text-slate-400 hover:text-slate-600'}`}>
+                    {tab}
+                  </button>
+                ))}
+              </div>
+            </div>
+            <div className="flex items-center gap-2 flex-wrap">
+              <div className="relative flex-1 min-w-[160px]">
+                <svg className="absolute left-2.5 top-1/2 -translate-y-1/2 text-slate-300" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+                <input
+                  className="w-full pl-7 pr-3 py-1.5 text-xs rounded-xl border border-slate-100 bg-slate-50 outline-none focus:ring-1 focus:ring-blue-300 focus:bg-white transition-all placeholder:text-slate-300"
+                  placeholder="배너명, 부서, 구좌 검색..."
+                  value={searchQuery}
+                  onChange={e => { setSearchQuery(e.target.value); setCurrentPage(1); }}
+                />
+              </div>
+              <div className="flex items-center gap-1.5">
+                <span className="text-[11px] text-slate-400 font-medium">정렬</span>
+                <div className="flex bg-slate-50 border border-slate-100 rounded-xl p-0.5">
+                  {[['start','시작일'],['end','종료일'],['name','이름'],['slot','구좌'],['status','상태']].map(([val, label]) => (
+                    <button key={val} onClick={() => setSortBy(val)}
+                      className={`px-2.5 py-1 rounded-lg text-[11px] font-bold transition-all ${sortBy === val ? 'bg-white text-blue-500 shadow-sm' : 'text-slate-400 hover:text-slate-600'}`}>
+                      {label}
+                    </button>
+                  ))}
+                </div>
+              </div>
             </div>
           </div>
           <div className="overflow-x-auto">
@@ -752,8 +784,11 @@ const MainApp = ({ onLogout }) => {
                   const status = getStatus(banner.start, banner.end);
                   const hasCollision = collisionInfo[banner.id];
                   const isBeingEdited = editingId === banner.id;
+                  const isHighlighted = highlightedId === banner.id;
                   return (
-                    <tr key={banner.id} className={`transition-colors text-xs ${hasCollision ? 'bg-red-50/40' : ''} ${isBeingEdited ? 'bg-blue-50/30' : 'hover:bg-slate-50/50'}`}>
+                    <tr key={banner.id}
+                      onClick={() => setHighlightedId(id => id === banner.id ? null : banner.id)}
+                      className={`transition-colors text-xs cursor-pointer ${hasCollision ? 'bg-red-50/40' : ''} ${isBeingEdited ? 'bg-blue-50/30' : isHighlighted ? 'bg-yellow-50' : 'hover:bg-slate-50/50'}`}>
                       <td className="px-3 py-1 text-center">
                         <div className="flex flex-col items-center gap-1">
                           <span className={`px-2 py-0.5 rounded-full text-[11px] font-bold whitespace-nowrap
