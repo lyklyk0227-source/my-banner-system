@@ -289,30 +289,38 @@ const MainApp = ({ onLogout }) => {
     } catch(e) { return []; }
   };
 
-  // ✅ FIX 1: updateBanners가 bannersRef를 항상 최신으로 유지
+  // updateBanners: bannersRef 동기화 + 변경 시 자동저장 트리거
   const updateBanners = (fn) => {
     setBanners(prev => {
       const next = typeof fn === 'function' ? fn(prev) : fn;
       bannersRef.current = next;
+      triggerSave(next);
       return next;
     });
   };
 
-  // 30초마다 자동저장
-  useEffect(() => {
-    const interval = setInterval(() => {
-      if (isFirstLoad.current || bannersRef.current.length === 0) return;
+  // 변경 후 3초 debounce 자동저장 + 창 닫기 시 즉시 저장
+  const saveTimerRef = useRef(null);
+  const triggerSaveRef = useRef(null);
+
+  // 변경 후 3초 debounce 저장 함수 — ref에 저장해서 선언 순서 무관하게 사용
+  triggerSaveRef.current = (data) => {
+    if (isFirstLoad.current || data.length === 0) return;
+    clearTimeout(saveTimerRef.current);
+    saveTimerRef.current = setTimeout(() => {
       setSaveStatus('saving');
-      fetch(SCRIPT_URL, { method: 'POST', body: JSON.stringify({ action: 'save', data: bannersRef.current }) })
-        .then(() => { setSaveStatus('saved'); saveLocalBackup(bannersRef.current); setTimeout(() => setSaveStatus('idle'), 2000); })
-        .catch(() => setSaveStatus('error'))
-    }, 30000);
-    return () => clearInterval(interval);
-  }, []);
+      fetch(SCRIPT_URL, { method: 'POST', body: JSON.stringify({ action: 'save', data }) })
+        .then(() => { setSaveStatus('saved'); saveLocalBackup(data); setTimeout(() => setSaveStatus('idle'), 2000); })
+        .catch(() => setSaveStatus('error'));
+    }, 3000);
+  };
+
+  const triggerSave = (data) => triggerSaveRef.current?.(data);
 
   useEffect(() => {
     const handleUnload = () => {
       if (isFirstLoad.current || bannersRef.current.length === 0) return;
+      clearTimeout(saveTimerRef.current);
       const payload = JSON.stringify({ action: 'save', data: bannersRef.current });
       navigator.sendBeacon(SCRIPT_URL, new Blob([payload], { type: 'application/json' }));
     };
@@ -325,6 +333,8 @@ const MainApp = ({ onLogout }) => {
   const nameInputRef = useRef(null);
   const deptInputRef = useRef(null);
   const slotRefs = useRef({});
+  const cellWidthRef = useRef(40); // 실제 셀 너비 (동적 업데이트)
+  const firstCellRef = useRef(null);
 
   useEffect(() => {
     fetch(SCRIPT_URL).then(r => r.json()).then(data => {
@@ -409,7 +419,8 @@ const MainApp = ({ onLogout }) => {
     });
     const normDate = (s) => s.slice(0, 10) + 'T00:00';
     // startX를 40px 셀 단위로 스냅 → 드래그 시 오차 방지
-    const snappedX = Math.round(e.clientX / 40) * 40;
+    const cw = cellWidthRef.current;
+    const snappedX = Math.round(e.clientX / cw) * cw;
     setDragging({ id: banner.id, type, startX: snappedX, startY: e.clientY, initialStart: normDate(banner.start), initialEnd: normDate(banner.end), initialSlot: banner.slot, slotLayouts });
     setDropTargetSlot(banner.slot);
   };
@@ -417,7 +428,8 @@ const MainApp = ({ onLogout }) => {
   useEffect(() => {
     const onMove = (e) => {
       if (!dragging) return;
-      const days = Math.floor((e.clientX - dragging.startX + 20) / 40);
+      const cw = cellWidthRef.current;
+      const days = Math.floor((e.clientX - dragging.startX + cw / 2) / cw);
       let newSlot = dragging.initialSlot;
       if (dragging.type === 'move') {
         for (const [s, r] of Object.entries(dragging.slotLayouts)) {
@@ -630,7 +642,7 @@ const MainApp = ({ onLogout }) => {
                       const cellIsHoliday = HOLIDAYS.has(dateStr);
                       const cellIsRed = date.getDay() === 0 || cellIsHoliday;
                       return (
-                        <td key={idx} style={{borderRight:'1px dashed #e2e8f0'}} className={`relative ${isToday(date) ? 'bg-blue-50/30' : cellIsRed ? 'bg-red-50/30' : ''}`}>
+                        <td key={idx} ref={idx === 0 ? (el) => { if (el) cellWidthRef.current = el.getBoundingClientRect().width; } : null} style={{borderRight:'1px dashed #e2e8f0'}} className={`relative ${isToday(date) ? 'bg-blue-50/30' : cellIsRed ? 'bg-red-50/30' : ''}`}>
                           {isToday(date) && <div className="absolute inset-y-0 left-1/2 w-0.5 bg-blue-400/70 z-0 pointer-events-none" />}
                           {visibleSlots[slot] && banners
                             .filter(b => {
@@ -663,7 +675,7 @@ const MainApp = ({ onLogout }) => {
                                 <div key={banner.id}
                                   onMouseDown={(e) => !isEditingThis && handleMouseDown(e, banner, 'move')}
                                   style={{
-                                    width: `calc(${duration * 40}px - 4px)`,
+                                    width: `calc(${duration * cellWidthRef.current}px - 4px)`,
                                     backgroundColor: banner.color || '#DBEAFE',
                                     top: '4px', left: '2px', height: '24px',
                                     zIndex: isDraggingThis ? 1000 : isEditingThis ? 200 : 20,
