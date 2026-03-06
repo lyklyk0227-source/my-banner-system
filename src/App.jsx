@@ -5,7 +5,7 @@ import {
   AlertCircle, Pencil, Check, X, Lock, Loader, BookOpen
 } from 'lucide-react';
 
-const SCRIPT_URL = 'const SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbx0diXr7d94zg5Z79yn62_y3Ln4DV_b7J77k9Mq580GdxBsP3wyhXYRN36OhJlbawJCMg/exec';
+const SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbx0diXr7d94zg5Z79yn62_y3Ln4DV_b7J77k9Mq580GdxBsP3wyhXYRN36OhJlbawJCMg/exec';
 const DEFAULT_SLOTS = ['로고 배너', '레이어', '헤더 배너', '강조형 no.1 (#1)', '강조형 no.2 (#2)', '강조형 no.1 (#3)', '강조형 no.2', '강조형 no.3', '띠 배너 (#1)', '띠 배너 (#2)', '플로팅 배너 (#1)', '플로팅 배너 (#2)', '플로팅 배너 (#3)'];
 const PASSWORD = '1004';
 
@@ -86,9 +86,6 @@ const ColorPicker = ({ value, onChange }) => {
 };
 
 /* ─────────────────────────────────────────
-   로그인 화면
-───────────────────────────────────────── */
-/* ─────────────────────────────────────────
    연월 선택 네비게이터
 ───────────────────────────────────────── */
 const DateNavigator = ({ currentDate, setCurrentDate }) => {
@@ -140,7 +137,6 @@ const DateNavigator = ({ currentDate, setCurrentDate }) => {
 
       {open && (
         <div className="absolute top-full left-1/2 -translate-x-1/2 mt-2 bg-white rounded-2xl shadow-xl border border-slate-100 p-4 z-50 w-[300px]">
-          {/* 연도 선택 */}
           <div className="flex items-center justify-between mb-2.5">
             <button onClick={() => setPickerYear(y => y-1)}
               className="w-6 h-6 flex items-center justify-center rounded-lg hover:bg-slate-100 text-slate-400 hover:text-blue-500 transition-colors">
@@ -152,7 +148,6 @@ const DateNavigator = ({ currentDate, setCurrentDate }) => {
               <ChevronRight size={13} />
             </button>
           </div>
-          {/* 월 그리드 */}
           <div className="grid grid-cols-4 gap-2 mb-3">
             {Array.from({length:12},(_,i)=>i).map(m => (
               <button key={m}
@@ -167,7 +162,6 @@ const DateNavigator = ({ currentDate, setCurrentDate }) => {
               </button>
             ))}
           </div>
-          {/* 오늘로 버튼 */}
           <button
             onClick={() => { setCurrentDate(new Date()); setOpen(false); }}
             className="w-full py-1.5 rounded-xl text-xs font-bold text-blue-500 bg-blue-50 hover:bg-blue-100 transition-colors border border-blue-100">
@@ -265,42 +259,17 @@ const MainApp = ({ onLogout }) => {
 
   const isFirstLoad = useRef(true);
   const bannersRef = useRef([]);
-  const [showBackup, setShowBackup] = useState(false);
-  const [backupList, setBackupList] = useState([]);
-
-  const BACKUP_KEY = 'banner_backups';
-  const MAX_BACKUPS = 30;
-
-  const saveLocalBackup = (data) => {
-    try {
-      const existing = JSON.parse(localStorage.getItem(BACKUP_KEY) || '[]');
-      const today = new Date().toISOString().slice(0, 10);
-      // 오늘 날짜 백업이 이미 있으면 덮어쓰기, 없으면 추가
-      const filtered = existing.filter(b => b.date !== today);
-      const updated = [{ date: today, time: new Date().toLocaleTimeString('ko-KR', {hour:'2-digit', minute:'2-digit'}), data }, ...filtered]
-        .slice(0, MAX_BACKUPS);
-      localStorage.setItem(BACKUP_KEY, JSON.stringify(updated));
-    } catch(e) {}
-  };
-
-  const loadBackupList = () => {
-    try {
-      return JSON.parse(localStorage.getItem(BACKUP_KEY) || '[]');
-    } catch(e) { return []; }
-  };
 
   const saveTimerRef = useRef(null);
 
-  // 실제 저장 실행 (외부에서 직접 호출)
   const doSave = useCallback((data) => {
     clearTimeout(saveTimerRef.current);
     setSaveStatus('saving');
     fetch(SCRIPT_URL, { method: 'POST', body: JSON.stringify({ action: 'save', data }) })
-      .then(() => { setSaveStatus('saved'); saveLocalBackup(data); setTimeout(() => setSaveStatus('idle'), 2000); })
+      .then(() => { setSaveStatus('saved'); setTimeout(() => setSaveStatus('idle'), 2000); })
       .catch(() => setSaveStatus('error'));
   }, []);
 
-  // 3초 debounce 저장 — 드래그 중엔 스킵, 로드 중엔 스킵
   const triggerSave = useCallback((data) => {
     if (isFirstLoad.current) return;
     if (draggingRef.current) return;
@@ -308,7 +277,6 @@ const MainApp = ({ onLogout }) => {
     saveTimerRef.current = setTimeout(() => doSave(data), 3000);
   }, [doSave]);
 
-  // updateBanners: bannersRef 동기화만 담당, 저장은 명시적으로만
   const updateBanners = useCallback((fn) => {
     setBanners(prev => {
       const next = typeof fn === 'function' ? fn(prev) : fn;
@@ -317,7 +285,6 @@ const MainApp = ({ onLogout }) => {
     });
   }, []);
 
-  // 배너 변경 감지 → debounce 저장 (드래그 제외)
   useEffect(() => {
     if (isFirstLoad.current) return;
     if (draggingRef.current) return;
@@ -345,9 +312,8 @@ const MainApp = ({ onLogout }) => {
   const [cellWidth, setCellWidth] = useState(40);
   const ganttContainerRef = useRef(null);
 
-  // 셀 너비 측정 — 브라우저 페인트 후 정확히 측정
   useEffect(() => {
-    if (loading) return; // 로딩 중엔 테이블이 없으므로 스킵
+    if (loading) return;
     const measure = () => {
       if (!ganttContainerRef.current) return;
       const th = ganttContainerRef.current.querySelector('thead th:nth-child(2)');
@@ -359,7 +325,6 @@ const MainApp = ({ onLogout }) => {
         }
       }
     };
-    // rAF 2번: 첫 번째 프레임(레이아웃) → 두 번째 프레임(페인트) 후 측정
     let raf1, raf2;
     raf1 = requestAnimationFrame(() => {
       raf2 = requestAnimationFrame(measure);
@@ -373,6 +338,7 @@ const MainApp = ({ onLogout }) => {
     };
   }, [loading]);
 
+  // ✅ 캐시 방지: ?t=${Date.now()} 추가
   useEffect(() => {
     fetch(`${SCRIPT_URL}?t=${Date.now()}`).then(r => r.json()).then(data => {
       if (data && data.length > 0) {
@@ -412,7 +378,6 @@ const MainApp = ({ onLogout }) => {
   };
 
   const shiftDateTime = (str, days) => {
-    // 날짜만 추출 후 이동 (시간 정보 버림 → 칸 정렬 오차 방지)
     const dateOnly = str.slice(0, 10);
     const d = new Date(dateOnly + 'T12:00:00');
     d.setDate(d.getDate() + days);
@@ -444,7 +409,7 @@ const MainApp = ({ onLogout }) => {
   const pagedBanners = filteredBanners.slice((currentPage - 1) * PAGE_SIZE, currentPage * PAGE_SIZE);
 
   const [dragging, setDragging] = useState(null);
-  const draggingRef = useRef(null); // triggerSave에서 드래그 중 감지용
+  const draggingRef = useRef(null);
   const [dropTargetSlot, setDropTargetSlot] = useState(null);
 
   const handleMouseDown = (e, banner, type) => {
@@ -456,7 +421,6 @@ const MainApp = ({ onLogout }) => {
       if (el) { const r = el.getBoundingClientRect(); slotLayouts[slot] = { top: r.top, bottom: r.bottom }; }
     });
     const normDate = (s) => s.slice(0, 10) + 'T00:00';
-    // startX를 40px 셀 단위로 스냅 → 드래그 시 오차 방지
     const cw = cellWidthRef.current;
     const snappedX = Math.round(e.clientX / cw) * cw;
     const dragObj = { id: banner.id, type, startX: snappedX, startY: e.clientY, initialStart: normDate(banner.start), initialEnd: normDate(banner.end), initialSlot: banner.slot, slotLayouts };
@@ -478,7 +442,6 @@ const MainApp = ({ onLogout }) => {
         setDropTargetSlot(newSlot);
       }
 
-      // ✅ FIX 1: 드래그 중에도 bannersRef 동기화 (updateBanners 사용)
       updateBanners(prev => prev.map(b => {
         if (b.id !== dragging.id) return b;
         let ns = dragging.initialStart, ne = dragging.initialEnd;
@@ -492,7 +455,6 @@ const MainApp = ({ onLogout }) => {
       draggingRef.current = null;
       setDragging(null);
       setDropTargetSlot(null);
-      // 드래그 종료 후 1초 뒤 저장
       if (!isFirstLoad.current && bannersRef.current.length > 0) {
         clearTimeout(saveTimerRef.current);
         saveTimerRef.current = setTimeout(() => doSave(bannersRef.current), 1000);
@@ -539,7 +501,6 @@ const MainApp = ({ onLogout }) => {
             </div>
           </div>
           <DateNavigator currentDate={currentDate} setCurrentDate={setCurrentDate} />
-          {/* 사용법 안내 */}
           <p className="text-[11px] text-slate-400 font-medium">
             바를 드래그해 이동하거나, 양 끝을 늘려 기간을 조절할 수 있어요
           </p>
@@ -585,57 +546,8 @@ const MainApp = ({ onLogout }) => {
             <svg xmlns="http://www.w3.org/2000/svg" width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/><polyline points="17 21 17 13 7 13 7 21"/><polyline points="7 3 7 8 15 8"/></svg>
             저장
           </button>
-          <button
-            onClick={() => { setBackupList(loadBackupList()); setShowBackup(true); }}
-            className="flex items-center gap-1.5 bg-white hover:bg-slate-50 border border-slate-200 text-slate-500 hover:text-slate-700 px-3 py-1.5 rounded-full text-xs font-semibold transition-all active:scale-95"
-            title="백업 복원">
-            <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><polyline points="1 4 1 10 7 10"/><path d="M3.51 15a9 9 0 1 0 .49-3.5"/></svg>
-            백업
-          </button>
         </div>
       </div>
-
-      {/* 백업 복원 모달 */}
-      {showBackup && (
-        <div className="fixed inset-0 bg-black/30 backdrop-blur-sm z-[99999] flex items-center justify-center"
-          onClick={() => setShowBackup(false)}>
-          <div className="bg-white rounded-3xl shadow-2xl w-full max-w-sm mx-4 overflow-hidden"
-            onClick={e => e.stopPropagation()}>
-            <div className="px-5 py-4 border-b border-slate-100 flex items-center justify-between">
-              <div>
-                <h3 className="font-bold text-slate-700 text-sm">백업 복원</h3>
-                <p className="text-[11px] text-slate-400 mt-0.5">날짜를 선택해 데이터를 복원해요 (최근 30일)</p>
-              </div>
-              <button onClick={() => setShowBackup(false)}
-                className="w-7 h-7 flex items-center justify-center rounded-xl hover:bg-slate-100 text-slate-400 transition-colors">
-                <X size={14} />
-              </button>
-            </div>
-            <div className="max-h-72 overflow-y-auto divide-y divide-slate-50">
-              {backupList.length === 0 ? (
-                <div className="py-10 text-center text-slate-300 text-sm">저장된 백업이 없어요</div>
-              ) : backupList.map((b, i) => (
-                <div key={i} className="flex items-center justify-between px-5 py-3 hover:bg-slate-50 transition-colors">
-                  <div>
-                    <p className="text-xs font-bold text-slate-600">{b.date}</p>
-                    <p className="text-[11px] text-slate-400">{b.time} 저장 · {b.data.length}개 배너</p>
-                  </div>
-                  <button
-                    onClick={() => {
-                      if (!window.confirm(`${b.date} 백업으로 복원할까요?
-현재 데이터는 사라져요.`)) return;
-                      updateBanners(b.data);
-                      setShowBackup(false);
-                    }}
-                    className="px-3 py-1.5 bg-blue-500 hover:bg-blue-600 text-white text-xs font-bold rounded-xl transition-colors">
-                    복원
-                  </button>
-                </div>
-              ))}
-            </div>
-          </div>
-        </div>
-      )}
 
       <div className="flex-1 overflow-auto p-5 space-y-5">
 
@@ -694,7 +606,6 @@ const MainApp = ({ onLogout }) => {
                             .filter(b => {
                               const bDateOnly = toDateOnly(b.start), bEndOnly = toDateOnly(b.end);
                               const viewStartStr = formatDateOnly(viewStart);
-                              // ✅ FIX 2: 뷰 범위 밖에서 시작하는 배너도 idx===0에서 렌더 (클램핑 없이 실제 기간 사용)
                               if (new Date(bDateOnly) < new Date(viewStartStr)) {
                                 return b.slot === slot && idx === 0 && bEndOnly >= viewStartStr;
                               }
@@ -705,10 +616,8 @@ const MainApp = ({ onLogout }) => {
                               const bEndOnly = toDateOnly(banner.end);
                               const viewStartStr = formatDateOnly(viewStart);
 
-                              // 시작일 (뷰 시작보다 앞이면 뷰 시작으로 클램핑)
                               const dispStart = bStartOnly < viewStartStr ? viewStartStr : bStartOnly;
 
-                              // 시간 영향 제거: 날짜 문자열을 정오(12:00) 기준으로 파싱해 DST·시간 오차 방지
                               const startMs = new Date(dispStart + 'T12:00:00').getTime();
                               const endMs   = new Date(bEndOnly  + 'T12:00:00').getTime();
                               const duration = Math.max(1, Math.round((endMs - startMs) / 86400000) + 1);
@@ -820,7 +729,6 @@ const MainApp = ({ onLogout }) => {
             <table className="w-full text-left border-collapse">
               <thead className="bg-slate-50/60 border-b border-slate-100">
                 <tr>
-                  {/* ✅ FIX 3: 시간 컬럼 제거 → "노출 기간 (시작~종료)" */}
                   {['상태','배너 명칭','요청 부서','색상','노출 구좌','노출 기간 (시작~종료)','메모','삭제'].map(h => (
                     <th key={h} className="px-3 py-2.5 text-[12px] font-bold text-slate-500 text-center whitespace-nowrap">{h}</th>
                   ))}
@@ -865,7 +773,6 @@ const MainApp = ({ onLogout }) => {
                           {allSlots.map(s => <option key={s} value={s}>{s}</option>)}
                         </select>
                       </td>
-                      {/* ✅ FIX 3: 날짜만 (시간 input 제거) */}
                       <td className="px-3 py-1 whitespace-nowrap text-center">
                         <div className="flex items-center justify-center gap-1.5 flex-nowrap">
                           <input type="date"
