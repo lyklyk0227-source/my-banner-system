@@ -303,9 +303,10 @@ const MainApp = ({ onLogout }) => {
   const saveTimerRef = useRef(null);
   const triggerSaveRef = useRef(null);
 
-  // 변경 후 3초 debounce 저장 함수 — ref에 저장해서 선언 순서 무관하게 사용
+  // 변경 후 3초 debounce 저장 — 드래그 중엔 스킵
   triggerSaveRef.current = (data) => {
     if (isFirstLoad.current || data.length === 0) return;
+    if (draggingRef.current) return; // 드래그 중엔 저장 안 함
     clearTimeout(saveTimerRef.current);
     saveTimerRef.current = setTimeout(() => {
       setSaveStatus('saving');
@@ -436,6 +437,7 @@ const MainApp = ({ onLogout }) => {
   const pagedBanners = filteredBanners.slice((currentPage - 1) * PAGE_SIZE, currentPage * PAGE_SIZE);
 
   const [dragging, setDragging] = useState(null);
+  const draggingRef = useRef(null); // triggerSave에서 드래그 중 감지용
   const [dropTargetSlot, setDropTargetSlot] = useState(null);
 
   const handleMouseDown = (e, banner, type) => {
@@ -450,7 +452,9 @@ const MainApp = ({ onLogout }) => {
     // startX를 40px 셀 단위로 스냅 → 드래그 시 오차 방지
     const cw = cellWidthRef.current;
     const snappedX = Math.round(e.clientX / cw) * cw;
-    setDragging({ id: banner.id, type, startX: snappedX, startY: e.clientY, initialStart: normDate(banner.start), initialEnd: normDate(banner.end), initialSlot: banner.slot, slotLayouts });
+    const dragObj = { id: banner.id, type, startX: snappedX, startY: e.clientY, initialStart: normDate(banner.start), initialEnd: normDate(banner.end), initialSlot: banner.slot, slotLayouts };
+    draggingRef.current = dragObj;
+    setDragging(dragObj);
     setDropTargetSlot(banner.slot);
   };
 
@@ -477,7 +481,21 @@ const MainApp = ({ onLogout }) => {
         return { ...b, start: ns, end: ne, slot: newSlot };
       }));
     };
-    const onUp = () => { setDragging(null); setDropTargetSlot(null); };
+    const onUp = () => {
+      draggingRef.current = null;
+      setDragging(null);
+      setDropTargetSlot(null);
+      // 드래그 종료 후 최종 상태 저장
+      if (!isFirstLoad.current && bannersRef.current.length > 0) {
+        clearTimeout(saveTimerRef.current);
+        saveTimerRef.current = setTimeout(() => {
+          setSaveStatus('saving');
+          fetch(SCRIPT_URL, { method: 'POST', body: JSON.stringify({ action: 'save', data: bannersRef.current }) })
+            .then(() => { setSaveStatus('saved'); saveLocalBackup(bannersRef.current); setTimeout(() => setSaveStatus('idle'), 2000); })
+            .catch(() => setSaveStatus('error'));
+        }, 1000);
+      }
+    };
     if (dragging) { window.addEventListener('mousemove', onMove); window.addEventListener('mouseup', onUp); }
     return () => { window.removeEventListener('mousemove', onMove); window.removeEventListener('mouseup', onUp); };
   }, [dragging]);
