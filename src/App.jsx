@@ -456,10 +456,25 @@ const MainApp = ({ onLogout }) => {
         </div>
 
         <div className="flex items-center gap-3">
-          <div className="flex items-center gap-1.5 text-xs">
-            {saveStatus === 'saving' && <><Loader size={11} className="text-blue-400 animate-spin" /><span className="text-slate-400">저장 중...</span></>}
-            {saveStatus === 'saved' && <><span className="w-1.5 h-1.5 rounded-full bg-emerald-400 inline-block" /><span className="text-emerald-500 font-medium">저장됨</span></>}
-            {saveStatus === 'error' && <><span className="w-1.5 h-1.5 rounded-full bg-red-400 inline-block" /><span className="text-red-400 font-medium">저장 실패</span></>}
+          <div className="flex items-center gap-1.5 text-xs font-semibold">
+            {saveStatus === 'saving' && (
+              <span className="flex items-center gap-1.5 text-slate-400">
+                <div className="w-3 h-3 border-2 border-slate-300 border-t-transparent rounded-full animate-spin" />
+                저장 중
+              </span>
+            )}
+            {saveStatus === 'saved' && (
+              <span className="flex items-center gap-1.5 text-emerald-500">
+                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
+                저장 완료
+              </span>
+            )}
+            {saveStatus === 'error' && (
+              <span className="flex items-center gap-1.5 text-red-400">
+                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+                저장 실패
+              </span>
+            )}
           </div>
           <label className="flex items-center gap-1.5 text-xs text-slate-500 cursor-pointer font-medium">
             <input type="checkbox" checked={showOnlyVisible} onChange={(e) => setShowOnlyVisible(e.target.checked)} className="w-3.5 h-3.5 rounded cursor-pointer" />
@@ -467,7 +482,7 @@ const MainApp = ({ onLogout }) => {
           </label>
           <button onClick={() => {
             const id = Date.now().toString();
-            updateBanners(prev => [...prev, { id, name: '새 배너', slot: allSlots[0], start: makeDefaultDatetime(0), end: makeDefaultDatetime(4, true), dept: '', color: '#DBEAFE', memo: '' }]);
+            updateBanners(prev => [...prev, { id, name: '새 배너', slot: allSlots.find(s => visibleSlots[s]) || allSlots[0], start: makeDefaultDatetime(0), end: makeDefaultDatetime(4, true), dept: '', color: '#DBEAFE', memo: '' }]);
           }} className="flex items-center gap-1.5 bg-blue-500 hover:bg-blue-600 text-white px-4 py-1.5 rounded-full text-xs font-bold shadow-sm transition-all active:scale-95">
             <Plus size={13} /> 배너 추가
           </button>
@@ -519,7 +534,7 @@ const MainApp = ({ onLogout }) => {
               <tbody>
                 {displaySlots.map(slot => (
                   <tr key={slot} ref={el => slotRefs.current[slot] = el}
-                    className={`h-8 border-b border-slate-50 transition-colors ${visibleSlots[slot] ? '' : 'opacity-25'} ${dropTargetSlot === slot ? 'bg-blue-50/40' : ''}`}>
+                    className={`h-8 border-b border-slate-50 transition-colors ${visibleSlots[slot] ? '' : 'opacity-70'} ${dropTargetSlot === slot ? 'bg-blue-50/40' : ''}`}>
                     <td className={`sticky left-0 z-30 border-r border-slate-100 px-3 h-8 shadow-[1px_0_0_0_#f1f5f9] transition-colors ${dropTargetSlot === slot ? 'bg-blue-50' : 'bg-white'}`}>
                       <div className="flex items-center justify-between gap-1">
                         <input className={`text-xs font-semibold bg-transparent outline-none focus:bg-slate-50 rounded px-1 w-full transition-all ${visibleSlots[slot] ? 'text-slate-500' : 'text-slate-300 line-through'}`}
