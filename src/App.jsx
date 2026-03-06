@@ -365,8 +365,11 @@ const MainApp = ({ onLogout }) => {
   };
 
   const shiftDateTime = (str, days) => {
-    const d = new Date(str); d.setDate(d.getDate() + days);
-    return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}T${String(d.getHours()).padStart(2,'0')}:${String(d.getMinutes()).padStart(2,'0')}`;
+    // 날짜만 추출 후 이동 (시간 정보 버림 → 칸 정렬 오차 방지)
+    const dateOnly = str.slice(0, 10);
+    const d = new Date(dateOnly + 'T12:00:00');
+    d.setDate(d.getDate() + days);
+    return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}T00:00`;
   };
 
   const getStatus = (s, e) => {
@@ -404,7 +407,8 @@ const MainApp = ({ onLogout }) => {
       const el = slotRefs.current[slot];
       if (el) { const r = el.getBoundingClientRect(); slotLayouts[slot] = { top: r.top, bottom: r.bottom }; }
     });
-    setDragging({ id: banner.id, type, startX: e.clientX, startY: e.clientY, initialStart: banner.start, initialEnd: banner.end, initialSlot: banner.slot, slotLayouts });
+    const normDate = (s) => s.slice(0, 10) + 'T00:00';
+    setDragging({ id: banner.id, type, startX: e.clientX, startY: e.clientY, initialStart: normDate(banner.start), initialEnd: normDate(banner.end), initialSlot: banner.slot, slotLayouts });
     setDropTargetSlot(banner.slot);
   };
 
@@ -590,7 +594,7 @@ const MainApp = ({ onLogout }) => {
                     const isHoliday = HOLIDAYS.has(dateKey);
                     const isRed = isSun || isHoliday;
                     return (
-                      <th key={idx} className={`w-[40px] border-r border-slate-100 p-1 text-center ${today ? 'bg-blue-50' : isRed && !today ? 'bg-red-50/40' : ''}`}>
+                      <th key={idx} className={`w-[40px] border-r border-slate-200 p-1 text-center ${today ? 'bg-blue-50' : isRed && !today ? 'bg-red-50/40' : ''}`}>
                         <div className={`text-[11px] font-bold mb-0.5 ${isRed ? 'text-red-400' : isSat ? 'text-blue-400' : 'text-slate-500'}`}>
                           {['일','월','화','수','목','금','토'][date.getDay()]}
                         </div>
@@ -606,7 +610,7 @@ const MainApp = ({ onLogout }) => {
               <tbody>
                 {displaySlots.map(slot => (
                   <tr key={slot} ref={el => slotRefs.current[slot] = el}
-                    className={`h-8 border-b border-slate-50 transition-colors ${visibleSlots[slot] ? '' : 'opacity-70'} ${dropTargetSlot === slot ? 'bg-blue-50/40' : ''}`}>
+                    className={`h-8 border-b border-slate-100 transition-colors ${visibleSlots[slot] ? '' : 'opacity-70'} ${dropTargetSlot === slot ? 'bg-blue-50/40' : ''}`}>
                     <td className={`sticky left-0 z-30 border-r border-slate-100 px-3 h-8 shadow-[1px_0_0_0_#f1f5f9] transition-colors ${dropTargetSlot === slot ? 'bg-blue-50' : 'bg-white'}`}>
                       <div className="flex items-center justify-between gap-1">
                         <input className={`text-xs font-semibold bg-transparent outline-none focus:bg-slate-50 rounded px-1 w-full transition-all ${visibleSlots[slot] ? 'text-slate-500' : 'text-slate-300 line-through'}`}
@@ -624,7 +628,7 @@ const MainApp = ({ onLogout }) => {
                       const cellIsHoliday = HOLIDAYS.has(dateStr);
                       const cellIsRed = date.getDay() === 0 || cellIsHoliday;
                       return (
-                        <td key={idx} className={`border-r border-slate-50 relative ${isToday(date) ? 'bg-blue-50/30' : cellIsRed ? 'bg-red-50/30' : ''}`}>
+                        <td key={idx} className={`border-r border-slate-200 relative ${isToday(date) ? 'bg-blue-50/30' : cellIsRed ? 'bg-red-50/30' : ''}`}>
                           {isToday(date) && <div className="absolute inset-y-0 left-1/2 w-0.5 bg-blue-400/70 z-0 pointer-events-none" />}
                           {visibleSlots[slot] && banners
                             .filter(b => {
