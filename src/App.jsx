@@ -88,6 +88,97 @@ const ColorPicker = ({ value, onChange }) => {
 /* ─────────────────────────────────────────
    로그인 화면
 ───────────────────────────────────────── */
+/* ─────────────────────────────────────────
+   연월 선택 네비게이터
+───────────────────────────────────────── */
+const DateNavigator = ({ currentDate, setCurrentDate }) => {
+  const [open, setOpen] = useState(false);
+  const [pickerYear, setPickerYear] = useState(currentDate.getFullYear());
+  const ref = useRef(null);
+
+  useEffect(() => {
+    if (open) setPickerYear(currentDate.getFullYear());
+  }, [open]);
+
+  useEffect(() => {
+    const handleClick = (e) => {
+      if (ref.current && !ref.current.contains(e.target)) setOpen(false);
+    };
+    document.addEventListener('mousedown', handleClick);
+    return () => document.removeEventListener('mousedown', handleClick);
+  }, []);
+
+  const selectMonth = (year, month) => {
+    const d = new Date(currentDate);
+    d.setFullYear(year);
+    d.setMonth(month);
+    setCurrentDate(d);
+    setOpen(false);
+  };
+
+  const isCurrentMonth = (year, month) =>
+    currentDate.getFullYear() === year && currentDate.getMonth() === month;
+
+  const now = new Date();
+  const isTodayMonth = (year, month) =>
+    now.getFullYear() === year && now.getMonth() === month;
+
+  return (
+    <div className="relative" ref={ref}>
+      <div className="flex items-center gap-1 bg-slate-100 px-2.5 py-1.5 rounded-full">
+        <ChevronLeft size={14} className="cursor-pointer text-slate-400 hover:text-blue-500 transition-colors"
+          onClick={() => { const d = new Date(currentDate); d.setMonth(d.getMonth()-1); setCurrentDate(d); }} />
+        <button
+          onClick={() => setOpen(o => !o)}
+          className="flex items-center gap-1 font-semibold text-slate-600 min-w-[80px] justify-center text-xs hover:text-blue-500 transition-colors">
+          <Calendar size={12} className="text-blue-400 flex-shrink-0" />
+          {currentDate.getFullYear()}. {String(currentDate.getMonth()+1).padStart(2,'0')}
+        </button>
+        <ChevronRight size={14} className="cursor-pointer text-slate-400 hover:text-blue-500 transition-colors"
+          onClick={() => { const d = new Date(currentDate); d.setMonth(d.getMonth()+1); setCurrentDate(d); }} />
+      </div>
+
+      {open && (
+        <div className="absolute top-full left-1/2 -translate-x-1/2 mt-2 bg-white rounded-2xl shadow-xl border border-slate-100 p-4 z-50 w-[300px]">
+          {/* 연도 선택 */}
+          <div className="flex items-center justify-between mb-2.5">
+            <button onClick={() => setPickerYear(y => y-1)}
+              className="w-6 h-6 flex items-center justify-center rounded-lg hover:bg-slate-100 text-slate-400 hover:text-blue-500 transition-colors">
+              <ChevronLeft size={13} />
+            </button>
+            <span className="text-xs font-bold text-slate-600">{pickerYear}년</span>
+            <button onClick={() => setPickerYear(y => y+1)}
+              className="w-6 h-6 flex items-center justify-center rounded-lg hover:bg-slate-100 text-slate-400 hover:text-blue-500 transition-colors">
+              <ChevronRight size={13} />
+            </button>
+          </div>
+          {/* 월 그리드 */}
+          <div className="grid grid-cols-4 gap-2 mb-3">
+            {Array.from({length:12},(_,i)=>i).map(m => (
+              <button key={m}
+                onClick={() => selectMonth(pickerYear, m)}
+                className={`py-1.5 px-1 rounded-xl text-[11px] font-semibold transition-all whitespace-nowrap
+                  ${isCurrentMonth(pickerYear, m)
+                    ? 'bg-blue-500 text-white shadow-sm'
+                    : isTodayMonth(pickerYear, m)
+                    ? 'bg-blue-50 text-blue-500 border border-blue-200'
+                    : 'text-slate-500 hover:bg-slate-100'}`}>
+                {m+1}월
+              </button>
+            ))}
+          </div>
+          {/* 오늘로 버튼 */}
+          <button
+            onClick={() => { setCurrentDate(new Date()); setOpen(false); }}
+            className="w-full py-1.5 rounded-xl text-xs font-bold text-blue-500 bg-blue-50 hover:bg-blue-100 transition-colors border border-blue-100">
+            오늘로 이동
+          </button>
+        </div>
+      )}
+    </div>
+  );
+};
+
 const LoginPage = ({ onLogin }) => {
   const [pw, setPw] = useState('');
   const [error, setError] = useState(false);
@@ -124,8 +215,8 @@ const LoginPage = ({ onLogin }) => {
           <div className="float w-16 h-16 rounded-2xl flex items-center justify-center text-3xl mb-4 shadow-lg shadow-blue-100"
             style={{ background: 'linear-gradient(135deg, #60a5fa, #818cf8)' }}>🍦</div>
           <h1 className="text-xl font-extrabold tracking-tight"
-            style={{ background: 'linear-gradient(90deg, #3b82f6, #6366f1)', WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent' }}>배너 관리</h1>
-          <p className="text-[10px] text-slate-400 mt-1 tracking-widest uppercase font-medium">i-Scream · Banner Mgmt</p>
+            style={{ background: 'linear-gradient(90deg, #3b82f6, #6366f1)', WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent' }}>배너 일정 관리</h1>
+          <p className="text-[10px] text-slate-400 mt-1 tracking-widest uppercase font-medium">i-Scream · Banner Scheduler</p>
         </div>
         <div className="space-y-3">
           <div className="relative">
@@ -353,34 +444,15 @@ const MainApp = ({ onLogout }) => {
             <div className="w-8 h-8 rounded-xl bg-gradient-to-br from-blue-400 to-indigo-500 flex items-center justify-center shadow-sm shadow-blue-200 text-base">🍦</div>
             <div>
               <h1 className="text-sm font-extrabold leading-tight tracking-tight"
-                style={{ background: 'linear-gradient(90deg, #3b82f6, #6366f1)', WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent' }}>배너 관리</h1>
-              <p className="text-[9px] text-slate-400 leading-tight tracking-widest uppercase font-medium">i-Scream · Banner Mgmt</p>
+                style={{ background: 'linear-gradient(90deg, #3b82f6, #6366f1)', WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent' }}>배너 일정 관리</h1>
+              <p className="text-[9px] text-slate-400 leading-tight tracking-widest uppercase font-medium">i-Scream · Banner Scheduler</p>
             </div>
           </div>
-          <div className="flex items-center gap-1 bg-slate-100 px-2.5 py-1.5 rounded-full">
-            <ChevronLeft size={14} className="cursor-pointer text-slate-400 hover:text-blue-500 transition-colors"
-              onClick={() => { const d = new Date(currentDate); d.setMonth(d.getMonth()-1); setCurrentDate(d); }} />
-            <span className="flex items-center gap-1 font-semibold text-slate-600 min-w-[72px] justify-center text-xs">
-              <Calendar size={12} className="text-blue-400" />
-              {currentDate.getFullYear()}. {currentDate.getMonth()+1}
-            </span>
-            <ChevronRight size={14} className="cursor-pointer text-slate-400 hover:text-blue-500 transition-colors"
-              onClick={() => { const d = new Date(currentDate); d.setMonth(d.getMonth()+1); setCurrentDate(d); }} />
-          </div>
+          <DateNavigator currentDate={currentDate} setCurrentDate={setCurrentDate} />
           {/* 사용법 안내 */}
-          <div className="flex items-center gap-2.5 px-3.5 py-1.5 bg-slate-50 rounded-xl border border-slate-100">
-            <span className="flex items-center gap-1.5 text-[11px] text-slate-400 font-medium">
-              <span className="text-slate-300 text-sm">⠿</span> 드래그로 이동
-            </span>
-            <span className="w-px h-3 bg-slate-200 flex-shrink-0" />
-            <span className="flex items-center gap-1.5 text-[11px] text-slate-400 font-medium">
-              <span className="text-slate-300 text-sm">↔</span> 양 끝으로 기간 조절
-            </span>
-            <span className="w-px h-3 bg-slate-200 flex-shrink-0" />
-            <span className="flex items-center gap-1.5 text-[11px] text-slate-400 font-medium">
-              <Pencil size={10} className="text-slate-300" /> 이름 · 부서 편집
-            </span>
-          </div>
+          <p className="text-[11px] text-slate-400 font-medium">
+            바를 드래그해 이동하거나, 양 끝을 늘려 기간을 조절할 수 있어요
+          </p>
         </div>
 
         <div className="flex items-center gap-3">
@@ -399,6 +471,18 @@ const MainApp = ({ onLogout }) => {
           }} className="flex items-center gap-1.5 bg-blue-500 hover:bg-blue-600 text-white px-4 py-1.5 rounded-full text-xs font-bold shadow-sm transition-all active:scale-95">
             <Plus size={13} /> 배너 추가
           </button>
+          <button
+            onClick={() => {
+              if (isFirstLoad.current || bannersRef.current.length === 0) return;
+              setSaveStatus('saving');
+              fetch(SCRIPT_URL, { method: 'POST', body: JSON.stringify({ action: 'save', data: bannersRef.current }) })
+                .then(() => { setSaveStatus('saved'); setTimeout(() => setSaveStatus('idle'), 2000); })
+                .catch(() => setSaveStatus('error'));
+            }}
+            className="flex items-center gap-1.5 bg-indigo-400 hover:bg-indigo-500 text-white px-4 py-1.5 rounded-full text-xs font-bold shadow-sm shadow-indigo-200 transition-all active:scale-95">
+            <svg xmlns="http://www.w3.org/2000/svg" width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/><polyline points="17 21 17 13 7 13 7 21"/><polyline points="7 3 7 8 15 8"/></svg>
+            저장
+          </button>
         </div>
       </div>
 
@@ -411,7 +495,7 @@ const MainApp = ({ onLogout }) => {
               <thead>
                 <tr className="border-b border-slate-100">
                   <th className="w-44 sticky left-0 z-40 bg-white border-r border-slate-100 p-3 text-left">
-                    <span className="text-[10px] font-bold text-slate-300 uppercase tracking-widest">구좌 리스트</span>
+                    <span className="text-[11px] font-bold text-slate-400">구좌 리스트</span>
                   </th>
                   {dateRange.map((date, idx) => {
                     const today = isToday(date), isSun = date.getDay()===0, isSat = date.getDay()===6;
@@ -454,7 +538,7 @@ const MainApp = ({ onLogout }) => {
                       const cellIsRed = date.getDay() === 0 || cellIsHoliday;
                       return (
                         <td key={idx} className={`border-r border-slate-50 relative ${isToday(date) ? 'bg-blue-50/30' : cellIsRed ? 'bg-red-50/30' : ''}`}>
-                          {isToday(date) && <div className="absolute inset-y-0 left-1/2 w-px bg-blue-300/40 z-0 pointer-events-none" />}
+                          {isToday(date) && <div className="absolute inset-y-0 left-1/2 w-0.5 bg-blue-400/70 z-0 pointer-events-none" />}
                           {visibleSlots[slot] && banners
                             .filter(b => {
                               const bDateOnly = toDateOnly(b.start), bEndOnly = toDateOnly(b.end);
@@ -587,9 +671,9 @@ const MainApp = ({ onLogout }) => {
             <table className="w-full text-left border-collapse">
               <thead className="bg-slate-50/60 border-b border-slate-100">
                 <tr>
-                  {/* ✅ FIX 3: 시간 컬럼 제거 → "노출 기간 (날짜)" */}
-                  {['상태','배너 명칭','요청 부서','색상','노출 구좌','노출 기간 (날짜)','메모','삭제'].map(h => (
-                    <th key={h} className="px-3 py-2.5 text-[10px] font-bold text-slate-400 uppercase tracking-wider text-center whitespace-nowrap">{h}</th>
+                  {/* ✅ FIX 3: 시간 컬럼 제거 → "노출 기간 (시작~종료)" */}
+                  {['상태','배너 명칭','요청 부서','색상','노출 구좌','노출 기간 (시작~종료)','메모','삭제'].map(h => (
+                    <th key={h} className="px-3 py-2.5 text-[12px] font-bold text-slate-500 text-center whitespace-nowrap">{h}</th>
                   ))}
                 </tr>
               </thead>
@@ -635,13 +719,11 @@ const MainApp = ({ onLogout }) => {
                       {/* ✅ FIX 3: 날짜만 (시간 input 제거) */}
                       <td className="px-3 py-1 whitespace-nowrap text-center">
                         <div className="flex items-center justify-center gap-1.5 flex-nowrap">
-                          <span className="text-[10px] font-bold text-slate-300 flex-shrink-0">시작</span>
                           <input type="date"
                             className="border border-slate-100 rounded-lg px-1.5 py-1 text-xs focus:ring-1 focus:ring-blue-400 outline-none flex-shrink-0"
                             value={toDateOnly(banner.start)}
                             onChange={(e) => updateBanners(prev => prev.map(b => b.id===banner.id ? {...b, start:`${e.target.value}T00:00`} : b))} />
                           <span className="text-slate-300 font-bold flex-shrink-0 px-0.5">~</span>
-                          <span className="text-[10px] font-bold text-slate-300 flex-shrink-0">종료</span>
                           <input type="date"
                             className="border border-slate-100 rounded-lg px-1.5 py-1 text-xs focus:ring-1 focus:ring-blue-400 outline-none flex-shrink-0"
                             value={toDateOnly(banner.end)}
@@ -654,7 +736,11 @@ const MainApp = ({ onLogout }) => {
                           onChange={(e) => updateBanners(prev => prev.map(b => b.id===banner.id ? {...b, memo: e.target.value} : b))} />
                       </td>
                       <td className="px-3 py-1 text-center">
-                        <button onClick={() => updateBanners(prev => prev.filter(b => b.id !== banner.id))}
+                        <button onClick={() => {
+                          if (window.confirm(`"${banner.name}" 배너를 삭제할까요?`)) {
+                            updateBanners(prev => prev.filter(b => b.id !== banner.id));
+                          }
+                        }}
                           className="text-slate-200 hover:text-red-400 transition-colors p-1.5 hover:bg-red-50 rounded-lg">
                           <Trash2 size={14} />
                         </button>
@@ -664,6 +750,13 @@ const MainApp = ({ onLogout }) => {
                 })}
               </tbody>
             </table>
+            {pagedBanners.length === 0 && (
+              <div className="flex flex-col items-center justify-center py-14 text-center">
+                <div className="text-3xl mb-3">📭</div>
+                <p className="text-sm font-semibold text-slate-400">배너가 없어요</p>
+                <p className="text-xs text-slate-300 mt-1">상단 '배너 추가' 버튼으로 새 배너를 등록해보세요</p>
+              </div>
+            )}
           </div>
           {totalPages > 1 && (
             <div className="px-5 py-3 border-t border-slate-100 flex items-center justify-between">
